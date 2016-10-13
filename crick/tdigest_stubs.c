@@ -4,17 +4,17 @@
 
 #include <stdlib.h>
 #include <float.h>
+#include <stdint.h>
 #include <math.h>
-#include "tdigest.h"
 
 
 typedef struct centroid {
     double mean;
-    int weight;
+    uint32_t weight;
 } centroid_t;
 
 
-struct tdigest {
+typedef struct tdigest {
     // tuning parameter
     double compression;
 
@@ -39,7 +39,7 @@ struct tdigest {
 
     // sorting buffer
     centroid_t *buffer_sort;
-};
+} tdigest_t;
 
 
 tdigest_t *tdigest_new(double compression) {
@@ -159,7 +159,7 @@ double centroid_merge(tdigest_t *T, double weight_so_far, double k1,
         T->merge_centroids[n].weight = w;
         T->merge_centroids[n].mean = u;
     }
-    else if (k2 - k1 <= 1) {
+    else if ((k2 - k1) <= 1) {
         T->merge_centroids[n].weight += w;
         T->merge_centroids[n].mean += ((u - T->merge_centroids[n].mean) *
                                        w / T->merge_centroids[n].weight);
@@ -277,26 +277,4 @@ double tdigest_quantile(tdigest_t *T, double q) {
     } else {
         return T->max;
     }
-}
-
-
-double tdigest_min(tdigest_t *T) {
-    tdigest_flush(T);
-    if (T->total_weight > 0)
-        return T->min;
-    return NAN;
-}
-
-
-double tdigest_max(tdigest_t *T) {
-    tdigest_flush(T);
-    if (T->total_weight > 0)
-        return T->max;
-    return NAN;
-}
-
-
-int tdigest_count(tdigest_t *T) {
-    tdigest_flush(T);
-    return T->total_weight;
 }
