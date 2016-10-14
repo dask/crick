@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <math.h>
 
+#include <Python.h>
 #include <numpy/arrayobject.h>
 
 
@@ -282,47 +283,82 @@ double tdigest_quantile(tdigest_t *T, double q) {
 }
 
 
-npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject* x, int w) {
+npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w) {
     NpyIter *iter;
     NpyIter_IterNextFunc *iternext;
-    char **dataptr;
-    npy_intp nonzero_count;
-    npy_intp *strideptr, *innersizeptr;
+    PyArrayObject *op[2];
+    npy_uint32 flags;
+    npy_uint32 op_flags[2];
+    PyArray_Descr *dtypes[2];
 
-    if (PyArray_SIZE(x) == 0) {
-        return 0;
+    npy_intp *innersizeptr, *strideptr;
+    char **dataptr;
+
+    npy_intp ret = -1;
+
+    op[0] = x;
+    op[1] = w;
+    flags = NPY_ITER_EXTERNAL_LOOP|
+            NPY_ITER_BUFFERED|
+            NPY_ITER_ZEROSIZE_OK;
+    op_flags[0] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;
+    op_flags[1] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;
+
+    dtypes[0] = PyArray_DescrFromType(NPY_FLOAT64);
+    if (dtypes[0] == NULL) {
+        goto finish;
+    }
+    dtypes[1] = PyArray_DescrFromType(NPY_INT64);
+    if (dtypes[0] == NULL) {
+        goto finish;
     }
 
-    iter = NpyIter_New(x, NPY_ITER_READONLY|
-                          NPY_ITER_EXTERNAL_LOOP|
-                          NPY_ITER_REFS_OK,
-                       NPY_KEEPORDER, NPY_NO_CASTING, NULL);
+    iter = NpyIter_MultiNew(2, op, flags, NPY_KEEPORDER, NPY_SAFE_CASTING,
+                            op_flags, dtypes);
     if (iter == NULL) {
-        return -1;
+        goto finish;
     }
 
     iternext = NpyIter_GetIterNext(iter, NULL);
     if (iternext == NULL) {
-        NpyIter_Deallocate(iter);
-        return -1;
+        goto finish;
     }
     dataptr = NpyIter_GetDataPtrArray(iter);
     strideptr = NpyIter_GetInnerStrideArray(iter);
     innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
 
+    NPY_BEGIN_THREADS_DEF;
+    if (!NpyIter_IterationNeedsAPI(iter)) {
+        NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));
+    }
+
     do {
-        char *data = dataptr[0];
-        npy_intp stride = strideptr[0];
-        npy_intp count = innersizeptr[0];
+        char *data_x = dataptr[0];
+        char *data_w = dataptr[1];
+        npy_intp stride_x = strideptr[0];
+        npy_intp stride_w = strideptr[1];
+        npy_intp count = *innersizeptr;
 
         while (count--) {
-            tdigest_add(T, *((double *)(data)), w);
-            data += stride;
+            tdigest_add(T, *(npy_float64 *)data_x,
+                           *(npy_int64 *)data_w);
+
+            data_x += stride_x;
+            data_w += stride_w;
         }
+    } while (iternext(iter));
 
-    } while(iternext(iter));
+    NPY_END_THREADS;
 
-    NpyIter_Deallocate(iter);
+    ret = 0;
 
-    return 0;
+finish:
+    Py_XDECREF(dtypes[0]);
+    Py_XDECREF(dtypes[1]);
+    if (iter != NULL) {
+        if (NpyIter_Deallocate(iter) != NPY_SUCCEED) {
+            return -1;
+        }
+    }
+    return ret;
 }

@@ -30,7 +30,7 @@ cdef extern from "tdigest_stubs.c":
     void tdigest_add(tdigest_t *T, double x, int w)
     void tdigest_flush(tdigest_t *T)
     double tdigest_quantile(tdigest_t *T, double q)
-    np.npy_intp tdigest_update_ndarray(tdigest_t *T, np.PyArrayObject *x, int w)
+    np.npy_intp tdigest_update_ndarray(tdigest_t *T, np.PyArrayObject *x, np.PyArrayObject *w)
 
 
 CENTROID_DTYPE = np.dtype([('mean', np.float64), ('weight', np.uint32)],
@@ -111,6 +111,14 @@ cdef class TDigest:
                    n * sizeof(centroid_t))
             self.tdigest.last = n - 1
 
-    def update(self, np.ndarray x):
-        x = x.astype(dtype='f8', copy=False)
-        tdigest_update_ndarray(self.tdigest, <np.PyArrayObject*>x, 1)
+    def update(self, x, w=1):
+        if np.isscalar(x):
+            x = np.array([x])
+        else:
+            x = np.asarray(x)
+        if np.isscalar(w):
+            w = np.array([w])
+        else:
+            w = np.asarray(w)
+        tdigest_update_ndarray(self.tdigest, <np.PyArrayObject*>x,
+                               <np.PyArrayObject*>w)
