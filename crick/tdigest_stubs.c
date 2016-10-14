@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <math.h>
 
+#include <numpy/arrayobject.h>
+
 
 typedef struct centroid {
     double mean;
@@ -277,4 +279,50 @@ double tdigest_quantile(tdigest_t *T, double q) {
     } else {
         return T->max;
     }
+}
+
+
+npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject* x, int w) {
+    NpyIter *iter;
+    NpyIter_IterNextFunc *iternext;
+    char **dataptr;
+    npy_intp nonzero_count;
+    npy_intp *strideptr, *innersizeptr;
+
+    if (PyArray_SIZE(x) == 0) {
+        return 0;
+    }
+
+    iter = NpyIter_New(x, NPY_ITER_READONLY|
+                          NPY_ITER_EXTERNAL_LOOP|
+                          NPY_ITER_REFS_OK,
+                       NPY_KEEPORDER, NPY_NO_CASTING, NULL);
+    if (iter == NULL) {
+        return -1;
+    }
+
+    iternext = NpyIter_GetIterNext(iter, NULL);
+    if (iternext == NULL) {
+        NpyIter_Deallocate(iter);
+        return -1;
+    }
+    dataptr = NpyIter_GetDataPtrArray(iter);
+    strideptr = NpyIter_GetInnerStrideArray(iter);
+    innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
+
+    do {
+        char *data = dataptr[0];
+        npy_intp stride = strideptr[0];
+        npy_intp count = innersizeptr[0];
+
+        while (count--) {
+            tdigest_add(T, *((double *)(data)), w);
+            data += stride;
+        }
+
+    } while(iternext(iter));
+
+    NpyIter_Deallocate(iter);
+
+    return 0;
 }
