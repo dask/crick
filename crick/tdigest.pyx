@@ -29,6 +29,7 @@ cdef extern from "tdigest_stubs.c":
     void tdigest_free(tdigest_t *T)
     void tdigest_add(tdigest_t *T, double x, int w)
     void tdigest_flush(tdigest_t *T)
+    void tdigest_merge(tdigest_t *T, tdigest_t *other)
     double tdigest_quantile(tdigest_t *T, double q)
     np.npy_intp tdigest_update_ndarray(tdigest_t *T, np.PyArrayObject *x, np.PyArrayObject *w)
 
@@ -122,3 +123,10 @@ cdef class TDigest:
             w = np.asarray(w)
         tdigest_update_ndarray(self.tdigest, <np.PyArrayObject*>x,
                                <np.PyArrayObject*>w)
+
+    def merge(self, *args):
+        if not all(isinstance(i, TDigest) for i in args):
+            raise TypeError("All arguments to merge must be TDigests")
+        cdef TDigest td
+        for td in args:
+            tdigest_merge(self.tdigest, td.tdigest)

@@ -283,6 +283,19 @@ double tdigest_quantile(tdigest_t *T, double q) {
 }
 
 
+void tdigest_merge(tdigest_t *T, tdigest_t *other) {
+    tdigest_flush(other);
+    if (other->total_weight) {
+        centroid_t *centroids = other->centroids;
+        for (int i=0; i < other->last + 1; i++) {
+            tdigest_add(T, centroids[i].mean, centroids[i].weight);
+        }
+        T->min = fmin(T->min, other->min);
+        T->max = fmin(T->max, other->max);
+    }
+}
+
+
 npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w) {
     NpyIter *iter;
     NpyIter_IterNextFunc *iternext;
