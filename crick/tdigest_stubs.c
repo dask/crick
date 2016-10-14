@@ -48,14 +48,15 @@ typedef struct tdigest {
 tdigest_t *tdigest_new(double compression) {
     tdigest_t *T = (tdigest_t *)malloc(sizeof(*T));
 
-    T->compression = compression;
-
-    // Select a good size and buffer_size
-    int size = M_PI_2 * compression + 0.5;
+    // Clip compression to bounds
     if (compression < 20)
         compression = 20;
     else if (compression > 1000)
         compression = 1000;
+    T->compression = compression;
+
+    // Select a good size and buffer_size
+    int size = M_PI_2 * compression + 0.5;
     int buffer_size = (7.5 + 0.37*compression - 2e-4*compression*compression);
 
     T->min = DBL_MAX;
@@ -86,10 +87,12 @@ void tdigest_free(tdigest_t *T) {
 }
 
 
-#define centroid_compare(a, b) ((a).mean < (b).mean)
+static inline int centroid_compare(centroid_t a, centroid_t b) {
+    return a.mean < b.mean;
+}
 
 
-void centroid_sort(size_t n, centroid_t array[], centroid_t buffer[])
+static void centroid_sort(size_t n, centroid_t array[], centroid_t buffer[])
 {
     centroid_t *a2[2], *a, *b;
     int curr, shift;
@@ -150,11 +153,13 @@ void centroid_sort(size_t n, centroid_t array[], centroid_t buffer[])
 }
 
 
-#define integrate(c, q) ((c) * (asin(2 * (q) - 1) + M_PI_2) / M_PI)
+static inline double integrate(double c, double q) {
+    return (c * (asin(2 * q - 1) + M_PI_2) / M_PI);
+}
 
 
-double centroid_merge(tdigest_t *T, double weight_so_far, double k1,
-                      double u, int w) {
+static double centroid_merge(tdigest_t *T, double weight_so_far, double k1,
+                             double u, int w) {
     double k2 = integrate(T->compression, (weight_so_far + w) / T->total_weight);
     int n = T->last;
 
@@ -297,12 +302,12 @@ void tdigest_merge(tdigest_t *T, tdigest_t *other) {
 
 
 npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w) {
-    NpyIter *iter;
+    NpyIter *iter = NULL;
     NpyIter_IterNextFunc *iternext;
     PyArrayObject *op[2];
     npy_uint32 flags;
     npy_uint32 op_flags[2];
-    PyArray_Descr *dtypes[2];
+    PyArray_Descr *dtypes[2] = {NULL};
 
     npy_intp *innersizeptr, *strideptr;
     char **dataptr;
@@ -322,7 +327,7 @@ npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w
         goto finish;
     }
     dtypes[1] = PyArray_DescrFromType(NPY_INT64);
-    if (dtypes[0] == NULL) {
+    if (dtypes[1] == NULL) {
         goto finish;
     }
 
