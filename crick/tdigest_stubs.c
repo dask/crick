@@ -244,6 +244,54 @@ void tdigest_add(tdigest_t *T, double x, int w) {
 }
 
 
+static inline double interpolate(double x, double x0, double x1) {
+    return (x - x0) / (x1 - x0);
+}
+
+
+double tdigest_cdf(tdigest_t *T, double x) {
+    tdigest_flush(T);
+
+    if (T->total_weight == 0)
+        return NAN;
+    if (x < T->min)
+        return 0;
+    if (x >= T->max)
+        return 1;
+
+    if (T->last == 0) {
+        if (T->max - T->min < DBL_EPSILON)
+            return 0.5;
+        return interpolate(x, T->min, T->max);
+    }
+
+    double r = 0;
+    double left = 0, right=0;
+    centroid_t a, b = {T->min, 0};
+
+    for (int i = 0; i < T->last + 1; i++) {
+        a = b;
+        b = T->centroids[i];
+
+        right = (b.mean - a.mean) * a.weight / (a.weight + b.weight);
+
+        if (x < a.mean + right) {
+            double value = (r + a.weight * interpolate(x, a.mean - left, a.mean + right)) / T->total_weight;
+            return value > 0.0 ? value : 0.0;
+        }
+
+        r += a.weight;
+        left = b.mean - (a.mean + right);
+    }
+
+    a = b;
+    right = T->max - a.mean;
+    if (x < a.mean + right)
+        return (r + a.weight * interpolate(x, a.mean - left, a.mean + right)) / T->total_weight;
+    return 1;
+}
+
+
 double tdigest_quantile(tdigest_t *T, double q) {
     tdigest_flush(T);
 

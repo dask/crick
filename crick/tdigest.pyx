@@ -31,6 +31,7 @@ cdef extern from "tdigest_stubs.c":
     void tdigest_flush(tdigest_t *T)
     void tdigest_merge(tdigest_t *T, tdigest_t *other)
     double tdigest_quantile(tdigest_t *T, double q)
+    double tdigest_cdf(tdigest_t *T, double x)
     np.npy_intp tdigest_update_ndarray(tdigest_t *T, np.PyArrayObject *x, np.PyArrayObject *w)
 
 
@@ -76,6 +77,9 @@ cdef class TDigest:
 
     def count(self):
         return self.tdigest.total_weight + self.tdigest.buffer_total_weight
+
+    def cdf(self, double x):
+        return tdigest_cdf(self.tdigest, x)
 
     def quantile(self, double q):
         return tdigest_quantile(self.tdigest, q)
