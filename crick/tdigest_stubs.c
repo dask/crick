@@ -347,7 +347,7 @@ void tdigest_merge(tdigest_t *T, tdigest_t *other) {
             tdigest_add(T, centroids[i].mean, centroids[i].weight);
         }
         T->min = fmin(T->min, other->min);
-        T->max = fmin(T->max, other->max);
+        T->max = fmax(T->max, other->max);
     }
 }
 

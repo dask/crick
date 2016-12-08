@@ -161,3 +161,37 @@ def test_serialize():
         np.testing.assert_equal(t.min(), t2.min())
         np.testing.assert_equal(t.max(), t2.max())
         np.testing.assert_equal(t.count(), t2.count())
+
+
+def test_merge():
+    t = TDigest()
+    t2 = TDigest()
+    t3 = TDigest()
+    a = np.random.uniform(0, 1, N)
+    b = np.random.uniform(2, 3, N)
+    data = np.concatenate([a, b])
+    t2.update(a)
+    t3.update(b)
+
+    t2_centroids = t2.centroids()
+
+    t.merge(t2, t3)
+    assert t.min() == min(t2.min(), t3.min())
+    assert t.max() == max(t2.max(), t3.max())
+    assert t.count() == t2.count() + t3.count()
+    # Check no mutation of args
+    assert (t2.centroids() == t2_centroids).all()
+
+    # *Quantile
+    q = np.array([0.001, 0.01, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99, 0.999])
+    est = np.array([t.quantile(i) for i in q])
+    q_est = quantiles_to_q(data, est)
+    np.testing.assert_allclose(q, q_est, atol=0.012, rtol=0)
+
+    # *CDF
+    x = q_to_x(data, q)
+    q_est = np.array(map(t.cdf, x))
+    np.testing.assert_allclose(q, q_est, atol=0.005)
+
+    with pytest.raises(TypeError):
+        t.merge(t2, 'not a tdigest')
