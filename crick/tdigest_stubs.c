@@ -256,7 +256,7 @@ double tdigest_cdf(tdigest_t *T, double x) {
         return NAN;
     if (x < T->min)
         return 0;
-    if (x >= T->max)
+    if (x > T->max)
         return 1;
 
     if (T->last == 0) {
