@@ -1,11 +1,14 @@
 import numpy as np
-from distutils.core import setup
+from setuptools import setup
+from setuptools.extension import Extension
 from Cython.Build import cythonize
-from distutils.extension import Extension
 
 sourcefiles = ['crick/tdigest.pyx']
 
-extensions = [Extension("crick/tdigest", sourcefiles)]
+extensions = [Extension("crick.tdigest", sourcefiles)]
 
-setup(ext_modules=cythonize(extensions),
+setup(name='crick',
+      version='0.0.1',
+      packages=['crick'],
+      ext_modules=cythonize(extensions),
       include_dirs=[np.get_include()])
