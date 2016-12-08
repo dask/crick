@@ -8,8 +8,8 @@ import pytest
 from crick import TDigest
 
 
-N = 100000
 # -- Distributions for testing --
+N = 100000
 
 # A highly skewed gamma distribution
 gamma = np.random.gamma(0.1, 0.1, N)
@@ -69,6 +69,10 @@ def test_distributions(data):
     t = TDigest()
     t.update(data)
 
+    assert t.count() == len(data)
+    assert t.min() == data.min()
+    assert t.max() == data.max()
+
     # *Quantile
     q = np.array([0.001, 0.01, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99, 0.999])
     est = np.array([t.quantile(i) for i in q])
@@ -104,6 +108,46 @@ def test_single():
     assert t.cdf(9) == 0
     assert t.cdf(10) == 0.5
     assert t.cdf(11) == 1
+
+
+def test_nan():
+    t = TDigest()
+    data = gamma.copy()
+    data[::10] = np.nan
+    t.update(data)
+    non_nan = data[~np.isnan(data)]
+    assert t.count() == len(non_nan)
+    assert t.min() == non_nan.min()
+    assert t.max() == non_nan.max()
+
+    t = TDigest()
+    t.add(np.nan)
+    assert t.count() == 0
+
+    with pytest.raises(ValueError):
+        t = TDigest()
+        t.update(data, skipna=False)
+
+    with pytest.raises(ValueError):
+        t = TDigest()
+        t.add(np.nan, skipna=False)
+
+
+def test_weights():
+    t = TDigest()
+    t.add(1, 10)
+    assert t.count() == 10
+
+    x = np.arange(5)
+    w = np.array([1, 2, 1, 2, 1])
+
+    t = TDigest()
+    t.update(x, 10)
+    assert t.count() == len(x) * 10
+
+    t = TDigest()
+    t.update(x, w)
+    assert t.count() == w.sum()
 
 
 def test_serialize():

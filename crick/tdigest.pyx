@@ -1,5 +1,5 @@
 from libc.string cimport memcpy
-from libc.math cimport NAN
+from libc.math cimport NAN, isnan
 cimport numpy as np
 import numpy as np
 
@@ -53,7 +53,9 @@ cdef class TDigest:
         return ("TDigest<compression={0}, "
                 "count={1}>").format(self.compression, self.count())
 
-    def add(self, double x, int w=1):
+    def add(self, double x, int w=1, skipna=True):
+        if isnan(x) and not skipna:
+            raise ValueError("NaN value encountered")
         tdigest_add(self.tdigest, x, w)
 
     def flush(self):
@@ -116,7 +118,7 @@ cdef class TDigest:
                    n * sizeof(centroid_t))
             self.tdigest.last = n - 1
 
-    def update(self, x, w=1):
+    def update(self, x, w=1, skipna=True):
         if np.isscalar(x):
             x = np.array([x])
         else:
@@ -125,6 +127,10 @@ cdef class TDigest:
             w = np.array([w])
         else:
             w = np.asarray(w)
+
+        if not skipna:
+            if np.isnan(x).any():
+                raise ValueError("NaN value encountered")
         tdigest_update_ndarray(self.tdigest, <np.PyArrayObject*>x,
                                <np.PyArrayObject*>w)
 
