@@ -4,7 +4,6 @@
 
 #include <stdlib.h>
 #include <float.h>
-#include <stdint.h>
 #include <math.h>
 
 #include <Python.h>
@@ -13,7 +12,7 @@
 
 typedef struct centroid {
     double mean;
-    uint32_t weight;
+    double weight;
 } centroid_t;
 
 
@@ -159,7 +158,7 @@ static inline double integrate(double c, double q) {
 
 
 static double centroid_merge(tdigest_t *T, double weight_so_far, double k1,
-                             double u, int w) {
+                             double u, double w) {
     double k2 = integrate(T->compression, (weight_so_far + w) / T->total_weight);
     int n = T->last;
 
@@ -232,7 +231,7 @@ void tdigest_flush(tdigest_t *T) {
 }
 
 
-void tdigest_add(tdigest_t *T, double x, int w) {
+void tdigest_add(tdigest_t *T, double x, double w) {
     if isnan(x)
         return;
 
@@ -377,7 +376,7 @@ npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w
     if (dtypes[0] == NULL) {
         goto finish;
     }
-    dtypes[1] = PyArray_DescrFromType(NPY_INT64);
+    dtypes[1] = PyArray_DescrFromType(NPY_FLOAT64);
     if (dtypes[1] == NULL) {
         goto finish;
     }
@@ -410,7 +409,7 @@ npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w
 
         while (count--) {
             tdigest_add(T, *(npy_float64 *)data_x,
-                           *(npy_int64 *)data_w);
+                           *(npy_float64 *)data_w);
 
             data_x += stride_x;
             data_w += stride_w;
