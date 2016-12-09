@@ -1,5 +1,8 @@
 from libc.string cimport memcpy
-from libc.math cimport NAN, isnan
+from libc.math cimport NAN, isnan, isfinite
+
+from copy import copy
+
 cimport numpy as np
 import numpy as np
 
@@ -30,6 +33,7 @@ cdef extern from "tdigest_stubs.c":
     void tdigest_add(tdigest_t *T, double x, double w)
     void tdigest_flush(tdigest_t *T)
     void tdigest_merge(tdigest_t *T, tdigest_t *other)
+    void tdigest_scale(tdigest_t *T, double factor)
     double tdigest_quantile(tdigest_t *T, double q)
     double tdigest_cdf(tdigest_t *T, double x)
     np.npy_intp tdigest_update_ndarray(tdigest_t *T, np.PyArrayObject *x, np.PyArrayObject *w)
@@ -173,7 +177,7 @@ cdef class TDigest:
         if isnan(x) and not skipna:
             raise ValueError("NaN value encountered")
         if w <= 0:
-            raise ValueError("w must be >= 0")
+            raise ValueError("w must be > 0")
         tdigest_add(self.tdigest, x, w)
 
     def update(self, x, w=1, skipna=True):
@@ -201,7 +205,7 @@ cdef class TDigest:
             w = np.asarray(w)
 
         if (w <= 0).any():
-            raise ValueError("w must be >= 0")
+            raise ValueError("w must be > 0")
 
         if not skipna:
             if np.isnan(x).any():
@@ -224,3 +228,21 @@ cdef class TDigest:
         cdef TDigest td
         for td in args:
             tdigest_merge(self.tdigest, td.tdigest)
+
+    def scale(self, double factor):
+        """scale(self, factor)
+
+        Return a new TDigest, with the weights all scaled by factor.
+
+        Parameters
+        ----------
+        factor : number
+            The factor to scale the weights by. Must be > 0.
+        """
+        if factor <= 0:
+            raise ValueError("factor must be > 0")
+        if not isfinite(factor):
+            raise ValueError("factor must be finite")
+        cdef TDigest out = copy(self)
+        tdigest_scale(out.tdigest, factor)
+        return out

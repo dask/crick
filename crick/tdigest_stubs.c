@@ -351,6 +351,18 @@ void tdigest_merge(tdigest_t *T, tdigest_t *other) {
 }
 
 
+void tdigest_scale(tdigest_t *T, double factor) {
+    tdigest_flush(T);
+    if (T->total_weight) {
+        centroid_t *centroids = T->centroids;
+        for (int i=0; i < T->last + 1; i++) {
+            centroids[i].weight *= factor;
+        }
+        T->total_weight *= factor;
+    }
+}
+
+
 npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w) {
     NpyIter *iter = NULL;
     NpyIter_IterNextFunc *iternext;
