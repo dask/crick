@@ -69,7 +69,7 @@ def test_distributions(data):
     t = TDigest()
     t.update(data)
 
-    assert t.count() == len(data)
+    assert t.size() == len(data)
     assert t.min() == data.min()
     assert t.max() == data.max()
 
@@ -95,14 +95,14 @@ def test_init():
 
 def test_repr():
     t = TDigest(500)
-    assert str(t) == "TDigest<compression=500.0, count=0>"
+    assert str(t) == "TDigest<compression=500.0, size=0.0>"
     t.update(np.arange(100))
-    assert str(t) == "TDigest<compression=500.0, count=100>"
+    assert str(t) == "TDigest<compression=500.0, size=100.0>"
 
 
 def test_empty():
     t = TDigest()
-    assert t.count() == 0
+    assert t.size() == 0
     assert np.isnan(t.min())
     assert np.isnan(t.max())
     assert np.isnan(t.quantile(0.5))
@@ -114,7 +114,7 @@ def test_single():
     t.add(10)
     assert t.min() == 10
     assert t.max() == 10
-    assert t.count() == 1
+    assert t.size() == 1
 
     assert t.quantile(0) == 10
     assert t.quantile(0.5) == 10
@@ -131,13 +131,13 @@ def test_nan():
     data[::10] = np.nan
     t.update(data)
     non_nan = data[~np.isnan(data)]
-    assert t.count() == len(non_nan)
+    assert t.size() == len(non_nan)
     assert t.min() == non_nan.min()
     assert t.max() == non_nan.max()
 
     t = TDigest()
     t.add(np.nan)
-    assert t.count() == 0
+    assert t.size() == 0
 
     with pytest.raises(ValueError):
         t = TDigest()
@@ -151,18 +151,18 @@ def test_nan():
 def test_weights():
     t = TDigest()
     t.add(1, 10)
-    assert t.count() == 10
+    assert t.size() == 10
 
     x = np.arange(5)
     w = np.array([1, 2, 1, 2, 1])
 
     t = TDigest()
     t.update(x, 10)
-    assert t.count() == len(x) * 10
+    assert t.size() == len(x) * 10
 
     t = TDigest()
     t.update(x, w)
-    assert t.count() == w.sum()
+    assert t.size() == w.sum()
 
 
 def test_serialize():
@@ -175,7 +175,7 @@ def test_serialize():
         assert (t.centroids() == t2.centroids()).all()
         np.testing.assert_equal(t.min(), t2.min())
         np.testing.assert_equal(t.max(), t2.max())
-        np.testing.assert_equal(t.count(), t2.count())
+        np.testing.assert_equal(t.size(), t2.size())
 
 
 def test_merge():
@@ -193,7 +193,7 @@ def test_merge():
     t.merge(t2, t3)
     assert t.min() == min(t2.min(), t3.min())
     assert t.max() == max(t2.max(), t3.max())
-    assert t.count() == t2.count() + t3.count()
+    assert t.size() == t2.size() + t3.size()
     # Check no mutation of args
     assert (t2.centroids() == t2_centroids).all()
 

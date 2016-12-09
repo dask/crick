@@ -9,7 +9,7 @@ np.import_array()
 cdef extern from "tdigest_stubs.c":
     ctypedef struct centroid_t:
         double mean
-        np.npy_uint32 weight
+        double weight
 
     # Not the full struct, just the parameters we want
     ctypedef struct tdigest_t:
@@ -27,7 +27,7 @@ cdef extern from "tdigest_stubs.c":
 
     tdigest_t *tdigest_new(double compression)
     void tdigest_free(tdigest_t *T)
-    void tdigest_add(tdigest_t *T, double x, int w)
+    void tdigest_add(tdigest_t *T, double x, double w)
     void tdigest_flush(tdigest_t *T)
     void tdigest_merge(tdigest_t *T, tdigest_t *other)
     double tdigest_quantile(tdigest_t *T, double q)
@@ -35,7 +35,7 @@ cdef extern from "tdigest_stubs.c":
     np.npy_intp tdigest_update_ndarray(tdigest_t *T, np.PyArrayObject *x, np.PyArrayObject *w)
 
 
-CENTROID_DTYPE = np.dtype([('mean', np.float64), ('weight', np.uint32)],
+CENTROID_DTYPE = np.dtype([('mean', np.float64), ('weight', np.float64)],
                           align=True)
 
 
@@ -62,9 +62,9 @@ cdef class TDigest:
 
     def __repr__(self):
         return ("TDigest<compression={0}, "
-                "count={1}>").format(self.compression, self.count())
+                "size={1}>").format(self.compression, self.size())
 
-    def add(self, double x, int w=1, skipna=True):
+    def add(self, double x, double w=1, skipna=True):
         """add(self, x, w, skipna=True)
 
         Add a sample to this digest.
@@ -73,7 +73,7 @@ cdef class TDigest:
         ----------
         x : float
             The value to add.
-        w : int, optional
+        w : float, optional
             The weight of the value to add. Default is 1.
         skipna : bool, optional
             If False, an error will be raised if ``x`` is ever ``NaN``.
@@ -81,6 +81,8 @@ cdef class TDigest:
         """
         if isnan(x) and not skipna:
             raise ValueError("NaN value encountered")
+        if w <= 0:
+            raise ValueError("w must be >= 0")
         tdigest_add(self.tdigest, x, w)
 
     @property
@@ -106,11 +108,11 @@ cdef class TDigest:
             return self.tdigest.max
         return NAN
 
-    def count(self):
-        """count(self)
+    def size(self):
+        """size(self)
 
-        The number of points in the digest."""
-        return int(self.tdigest.total_weight + self.tdigest.buffer_total_weight)
+        The sum of the weights on all centroids."""
+        return self.tdigest.total_weight + self.tdigest.buffer_total_weight
 
     def cdf(self, double x):
         """cdf(self, x)
@@ -197,6 +199,9 @@ cdef class TDigest:
             w = np.array([w])
         else:
             w = np.asarray(w)
+
+        if (w <= 0).any():
+            raise ValueError("w must be >= 0")
 
         if not skipna:
             if np.isnan(x).any():
