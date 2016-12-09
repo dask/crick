@@ -64,27 +64,6 @@ cdef class TDigest:
         return ("TDigest<compression={0}, "
                 "size={1}>").format(self.compression, self.size())
 
-    def add(self, double x, double w=1, skipna=True):
-        """add(self, x, w, skipna=True)
-
-        Add a sample to this digest.
-
-        Parameters
-        ----------
-        x : float
-            The value to add.
-        w : float, optional
-            The weight of the value to add. Default is 1.
-        skipna : bool, optional
-            If False, an error will be raised if ``x`` is ever ``NaN``.
-            Otherwise, ``NaN`` values are ignored. Default is True.
-        """
-        if isnan(x) and not skipna:
-            raise ValueError("NaN value encountered")
-        if w <= 0:
-            raise ValueError("w must be >= 0")
-        tdigest_add(self.tdigest, x, w)
-
     @property
     def compression(self):
         """The compression factor for this digest"""
@@ -175,6 +154,27 @@ cdef class TDigest:
             memcpy(self.tdigest.centroids, centroids.data,
                    n * sizeof(centroid_t))
             self.tdigest.last = n - 1
+
+    def add(self, double x, double w=1, skipna=True):
+        """add(self, x, w, skipna=True)
+
+        Add a sample to this digest.
+
+        Parameters
+        ----------
+        x : float
+            The value to add.
+        w : float, optional
+            The weight of the value to add. Default is 1.
+        skipna : bool, optional
+            If False, an error will be raised if ``x`` is ever ``NaN``.
+            Otherwise, ``NaN`` values are ignored. Default is True.
+        """
+        if isnan(x) and not skipna:
+            raise ValueError("NaN value encountered")
+        if w <= 0:
+            raise ValueError("w must be >= 0")
+        tdigest_add(self.tdigest, x, w)
 
     def update(self, x, w=1, skipna=True):
         """update(self, x, w, skipna=True)
