@@ -210,3 +210,26 @@ def test_merge():
 
     with pytest.raises(TypeError):
         t.merge(t2, 'not a tdigest')
+
+
+def test_scale():
+    t = TDigest()
+    t.update(uniform)
+
+    for factor in [0.5, 2]:
+        t2 = t.scale(factor)
+        assert t is not t2
+        assert t.size() * factor == t2.size()
+        assert t.min() == t2.min()
+        assert t.max() == t2.max()
+        a = t.centroids()
+        b = t2.centroids()
+        np.testing.assert_array_equal(a['mean'], b['mean'])
+        np.testing.assert_allclose(a['weight'] * factor, b['weight'])
+
+    for val in [-0.5, 0, np.nan, np.inf]:
+        with pytest.raises(ValueError):
+            t.scale(val)
+
+    with pytest.raises(TypeError):
+        t.scale('foobar')
