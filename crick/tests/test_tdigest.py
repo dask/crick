@@ -85,6 +85,21 @@ def test_distributions(data):
     np.testing.assert_allclose(q, q_est, atol=0.005)
 
 
+def test_init():
+    t = TDigest(500)
+    assert t.compression == 500
+
+    with pytest.raises(TypeError):
+        TDigest('foo')
+
+
+def test_repr():
+    t = TDigest(500)
+    assert str(t) == "TDigest<compression=500.0, count=0>"
+    t.update(np.arange(100))
+    assert str(t) == "TDigest<compression=500.0, count=100>"
+
+
 def test_empty():
     t = TDigest()
     assert t.count() == 0

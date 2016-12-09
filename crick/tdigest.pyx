@@ -57,7 +57,8 @@ cdef class TDigest:
         self.tdigest = tdigest_new(compression)
 
     def __dealloc__(self):
-        tdigest_free(self.tdigest)
+        if self.tdigest != NULL:
+            tdigest_free(self.tdigest)
 
     def __repr__(self):
         return ("TDigest<compression={0}, "
@@ -109,7 +110,7 @@ cdef class TDigest:
         """count(self)
 
         The number of points in the digest."""
-        return self.tdigest.total_weight + self.tdigest.buffer_total_weight
+        return int(self.tdigest.total_weight + self.tdigest.buffer_total_weight)
 
     def cdf(self, double x):
         """cdf(self, x)
