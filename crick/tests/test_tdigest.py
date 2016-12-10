@@ -81,7 +81,7 @@ def test_distributions(data):
 
     # *CDF
     x = q_to_x(data, q)
-    q_est = np.array(map(t.cdf, x))
+    q_est = np.array([t.cdf(i) for i in x])
     np.testing.assert_allclose(q, q_est, atol=0.005)
 
 
@@ -205,7 +205,7 @@ def test_merge():
 
     # *CDF
     x = q_to_x(data, q)
-    q_est = np.array(map(t.cdf, x))
+    q_est = np.array([t.cdf(i) for i in x])
     np.testing.assert_allclose(q, q_est, atol=0.005)
 
     with pytest.raises(TypeError):
