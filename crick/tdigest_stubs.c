@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <float.h>
 #include <math.h>
+#include <assert.h>
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
@@ -55,7 +56,7 @@ tdigest_t *tdigest_new(double compression) {
     T->compression = compression;
 
     // Select a good size and buffer_size
-    int size = M_PI_2 * compression + 0.5;
+    int size = 2 * compression + 0.5;
     int buffer_size = (7.5 + 0.37*compression - 2e-4*compression*compression);
 
     T->min = DBL_MAX;
@@ -163,15 +164,18 @@ static double centroid_merge(tdigest_t *T, double weight_so_far, double k1,
     int n = T->last;
 
     if (weight_so_far == 0) {
+        assert(n < T->size);
         T->merge_centroids[n].weight = w;
         T->merge_centroids[n].mean = u;
     }
     else if ((k2 - k1) <= 1) {
+        assert(n < T->size);
         T->merge_centroids[n].weight += w;
         T->merge_centroids[n].mean += ((u - T->merge_centroids[n].mean) *
                                        w / T->merge_centroids[n].weight);
     } else {
         T->last = ++n;
+        assert(n < T->size);
         T->merge_centroids[n].weight = w;
         T->merge_centroids[n].mean = u;
         k1 = integrate(T->compression, weight_so_far / T->total_weight);
