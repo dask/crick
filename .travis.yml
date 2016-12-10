@@ -1,0 +1,31 @@
+language: python
+sudo: false
+
+env:
+  matrix:
+    - PYTHON=2.7 NUMPY=1.10.4
+    - PYTHON=2.7 NUMPY=1.11.0
+    - PYTHON=3.3 NUMPY=1.9.2
+    - PYTHON=3.4 NUMPY=1.10.4
+    - PYTHON=3.5 NUMPY=1.11.0
+
+install:
+    # Install conda
+    - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
+    - bash miniconda.sh -b -p $HOME/miniconda
+    - export PATH="$HOME/miniconda/bin:$PATH"
+    - conda config --set always_yes yes --set changeps1 no
+    - conda update conda
+
+    # Install dependencies
+    - conda create -n test-environment python=$PYTHON numpy=$NUMPY pytest cython
+    - source activate test-environment
+
+    # Install crick with debug on
+    - pip install --no-deps --global-option build --global-option --debug -e .
+
+script:
+    - py.test crick
+
+notifications:
+  email: false
