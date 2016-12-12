@@ -236,7 +236,7 @@ void tdigest_flush(tdigest_t *T) {
 
 
 void tdigest_add(tdigest_t *T, double x, double w) {
-    if isnan(x)
+    if (isnan(x))
         return;
 
     if (T->buffer_last >= T->buffer_size) {
