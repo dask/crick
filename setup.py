@@ -47,7 +47,9 @@ extensions = [Extension("crick.tdigest",
                         **kwargs),
               Extension("crick.stream_summary",
                         ['crick/stream_summary.pyx'],
-                        include_dirs=['crick/klib'],
+                        include_dirs=['crick/klib']),
+              Extension("crick.stats",
+                        ['crick/stats.pyx'],
                         **kwargs)
               ]
 
