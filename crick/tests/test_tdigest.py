@@ -103,6 +103,7 @@ def test_repr():
 def test_empty():
     t = TDigest()
     assert t.size() == 0
+    assert len(t.centroids()) == 0
     assert np.isnan(t.min())
     assert np.isnan(t.max())
     assert np.isnan(t.quantile(0.5))
@@ -125,27 +126,62 @@ def test_single():
     assert t.cdf(11) == 1
 
 
-def test_nan():
+def test_nonfinite():
     t = TDigest()
     data = gamma.copy()
     data[::10] = np.nan
+    data[::7] = np.inf
     t.update(data)
-    non_nan = data[~np.isnan(data)]
-    assert t.size() == len(non_nan)
-    assert t.min() == non_nan.min()
-    assert t.max() == non_nan.max()
+    finite = data[np.isfinite(data)]
+    assert t.size() == len(finite)
+    assert t.min() == finite.min()
+    assert t.max() == finite.max()
 
     t = TDigest()
     t.add(np.nan)
+    t.add(np.inf)
+    t.add(-np.inf)
     assert t.size() == 0
 
-    with pytest.raises(ValueError):
+    for w in [np.inf, -np.inf, np.nan]:
         t = TDigest()
-        t.update(data, skipna=False)
+        with pytest.raises(ValueError):
+            t.add(1, w)
 
-    with pytest.raises(ValueError):
+        w = np.array([1, 2, w, 3, 4])
         t = TDigest()
-        t.add(np.nan, skipna=False)
+        with pytest.raises(ValueError):
+            t.update(np.ones(5), w)
+
+
+def test_small_w():
+    eps = np.finfo('f8').eps
+    t = TDigest()
+    t.update(gamma, eps)
+    assert t.size() == 0
+    assert len(t.centroids()) == 0
+
+    t = TDigest()
+    t.add(1, eps)
+    assert t.size() == 0
+    assert len(t.centroids()) == 0
+
+
+def test_non_numeric_errors():
+    data = np.array(['foo', 'bar', 'baz'])
+    t = TDigest()
+
+    with pytest.raises(TypeError):
+        t.update(data)
+
+    with pytest.raises(TypeError):
+        t.update(1, data)
+
+    with pytest.raises(TypeError):
+        t.add('foo')
+
+    with pytest.raises(TypeError):
+        t.add(1, 'foo')
 
 
 def test_weights():
@@ -233,3 +269,17 @@ def test_scale():
 
     with pytest.raises(TypeError):
         t.scale('foobar')
+
+    # Test scale compacts
+    eps = np.finfo('f8').eps
+    t = TDigest()
+    t.update([1, 2, 3, 4, 5],
+             [1, 1000, 1, 10000, 1])
+    t2 = t.scale(eps)
+    assert len(t2.centroids()) == 2
+
+    # Compacts to 0
+    t = TDigest()
+    t.update([1, 2, 3, 4, 5])
+    t2 = t.scale(eps)
+    assert len(t2.centroids()) == 0

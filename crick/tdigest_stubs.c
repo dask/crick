@@ -154,7 +154,15 @@ static void centroid_sort(size_t n, centroid_t array[], centroid_t buffer[])
 
 
 static inline double integrate(double c, double q) {
-    return (c * (asin(2 * q - 1) + M_PI_2) / M_PI);
+    // TODO: Rarely (but sometimes) 1 < q < epsilon, due to some roundoff
+    // issues. There's probably a way to rearrange computations so this doesn't
+    // ever happen. For now, we threshold here.
+    q = fmin(q, 1);
+
+    double out = (c * (asin(2 * q - 1) + M_PI_2) / M_PI);
+    assert(out <= c);
+    assert(0 <= out);
+    return out;
 }
 
 
@@ -185,7 +193,7 @@ static double centroid_merge(tdigest_t *T, double weight_so_far, double k1,
 
 
 void tdigest_flush(tdigest_t *T) {
-    if (T->buffer_total_weight == 0)
+    if (T->buffer_last == 0)
         return;
 
     centroid_sort(T->buffer_last, T->buffer_centroids, T->buffer_sort);
@@ -205,9 +213,11 @@ void tdigest_flush(tdigest_t *T) {
 
     while (i < T->buffer_last && j < n) {
         if (centroid_compare(T->buffer_centroids[i], T->centroids[j])) {
+            assert(i < T->buffer_size);
             c = T->buffer_centroids[i];
             i++;
         } else {
+            assert(j < T->size);
             c = T->centroids[j];
             j++;
         }
@@ -216,12 +226,14 @@ void tdigest_flush(tdigest_t *T) {
     }
 
     for (; i < T->buffer_last; i++) {
+        assert(i < T->buffer_size);
         c = T->buffer_centroids[i];
         k1 = centroid_merge(T, weight_so_far, k1, c.mean, c.weight);
         weight_so_far += c.weight;
     }
 
     for (; j < n; j++) {
+        assert(j < T->size);
         c = T->centroids[j];
         k1 = centroid_merge(T, weight_so_far, k1, c.mean, c.weight);
         weight_so_far += c.weight;
@@ -236,7 +248,13 @@ void tdigest_flush(tdigest_t *T) {
 
 
 void tdigest_add(tdigest_t *T, double x, double w) {
-    if (isnan(x))
+    // w must be > 0 and finite, for speed we assume the caller has checked this
+    assert(w > 0);
+    assert(isfinite(w));
+
+    // Ignore x = NAN, INF, and -INF
+    // Ignore w <= eps
+    if (!isfinite(x) || w <= DBL_EPSILON)
         return;
 
     if (T->buffer_last >= T->buffer_size) {
@@ -244,6 +262,8 @@ void tdigest_add(tdigest_t *T, double x, double w) {
     }
 
     int n = T->buffer_last++;
+    assert(n < T->buffer_size);
+
     T->buffer_centroids[n].mean = x;
     T->buffer_centroids[n].weight = w;
     T->buffer_total_weight += w;
@@ -357,12 +377,22 @@ void tdigest_merge(tdigest_t *T, tdigest_t *other) {
 
 void tdigest_scale(tdigest_t *T, double factor) {
     tdigest_flush(T);
+    double total_weight = 0;
     if (T->total_weight) {
         centroid_t *centroids = T->centroids;
+        double w;
+        int j = 0;
         for (int i=0; i < T->last + 1; i++) {
-            centroids[i].weight *= factor;
+            w = centroids[i].weight * factor;
+            // If the scaled weight is approximately 0, skip the centroid
+            if (w > DBL_EPSILON) {
+                centroids[j].weight = w;
+                total_weight += w;
+                j++;
+            }
         }
-        T->total_weight *= factor;
+        T->total_weight = total_weight;
+        T->last = j == 0 ? j : j - 1;
     }
 }
 
@@ -380,11 +410,14 @@ npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w
 
     npy_intp ret = -1;
 
+    /* Handle zero-sized arrays specially */
+    if (PyArray_SIZE(x) == 0 || PyArray_SIZE(w) == 0) {
+        return 0;
+    }
+
     op[0] = x;
     op[1] = w;
-    flags = NPY_ITER_EXTERNAL_LOOP|
-            NPY_ITER_BUFFERED|
-            NPY_ITER_ZEROSIZE_OK;
+    flags = NPY_ITER_EXTERNAL_LOOP | NPY_ITER_BUFFERED;
     op_flags[0] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;
     op_flags[1] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;
 
@@ -392,10 +425,8 @@ npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w
     if (dtypes[0] == NULL) {
         goto finish;
     }
-    dtypes[1] = PyArray_DescrFromType(NPY_FLOAT64);
-    if (dtypes[1] == NULL) {
-        goto finish;
-    }
+    dtypes[1] = dtypes[0];
+    Py_INCREF(dtypes[1]);
 
     iter = NpyIter_MultiNew(2, op, flags, NPY_KEEPORDER, NPY_SAFE_CASTING,
                             op_flags, dtypes);
@@ -412,9 +443,7 @@ npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w
     innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
 
     NPY_BEGIN_THREADS_DEF;
-    if (!NpyIter_IterationNeedsAPI(iter)) {
-        NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));
-    }
+    NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));
 
     do {
         char *data_x = dataptr[0];

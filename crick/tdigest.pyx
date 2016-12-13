@@ -1,5 +1,5 @@
 from libc.string cimport memcpy
-from libc.math cimport NAN, isnan, isfinite
+from libc.math cimport NAN, isfinite
 
 from copy import copy
 
@@ -36,11 +36,10 @@ cdef extern from "tdigest_stubs.c":
     void tdigest_scale(tdigest_t *T, double factor)
     double tdigest_quantile(tdigest_t *T, double q)
     double tdigest_cdf(tdigest_t *T, double x)
-    np.npy_intp tdigest_update_ndarray(tdigest_t *T, np.PyArrayObject *x, np.PyArrayObject *w)
+    np.npy_intp tdigest_update_ndarray(tdigest_t *T, np.PyArrayObject *x, np.PyArrayObject *w) except -1
 
 
-CENTROID_DTYPE = np.dtype([('mean', np.float64), ('weight', np.float64)],
-                          align=True)
+CENTROID_DTYPE = np.dtype([('mean', np.float64), ('weight', np.float64)])
 
 
 cdef class TDigest:
@@ -159,8 +158,8 @@ cdef class TDigest:
                    n * sizeof(centroid_t))
             self.tdigest.last = n - 1
 
-    def add(self, double x, double w=1, skipna=True):
-        """add(self, x, w, skipna=True)
+    def add(self, double x, double w=1):
+        """add(self, x, w)
 
         Add a sample to this digest.
 
@@ -170,18 +169,14 @@ cdef class TDigest:
             The value to add.
         w : float, optional
             The weight of the value to add. Default is 1.
-        skipna : bool, optional
-            If False, an error will be raised if ``x`` is ever ``NaN``.
-            Otherwise, ``NaN`` values are ignored. Default is True.
         """
-        if isnan(x) and not skipna:
-            raise ValueError("NaN value encountered")
-        if w <= 0:
-            raise ValueError("w must be > 0")
+        # Don't check w in the common case where w is 1
+        if w != 1 and (w <= 0 or not isfinite(w)):
+            raise ValueError("w must be > 0 and finite")
         tdigest_add(self.tdigest, x, w)
 
-    def update(self, x, w=1, skipna=True):
-        """update(self, x, w, skipna=True)
+    def update(self, x, w=1):
+        """update(self, x, w)
 
         Add many samples to this digest.
 
@@ -191,25 +186,25 @@ cdef class TDigest:
             The values to add.
         w : array_like, optional
             The weight (or weights) of the values to add. Default is 1.
-        skipna : bool, optional
-            If False, an error will be raised if ``x`` is ever ``NaN``.
-            Otherwise, ``NaN`` values are ignored. Default is True.
         """
-        if np.isscalar(x):
-            x = np.array([x])
-        else:
-            x = np.asarray(x)
+        x = np.array([x]) if np.isscalar(x) else np.asarray(x)
         if np.isscalar(w):
+            # Don't check w in the common case where w is 1
+            check_w = w != 1
             w = np.array([w])
         else:
+            check_w = True
             w = np.asarray(w)
 
-        if (w <= 0).any():
-            raise ValueError("w must be > 0")
+        if not np.can_cast(x, 'f8', casting='safe'):
+            raise TypeError("x must be numeric")
 
-        if not skipna:
-            if np.isnan(x).any():
-                raise ValueError("NaN value encountered")
+        if not np.can_cast(w, 'f8', casting='safe'):
+            raise TypeError("w must be numeric")
+
+        if check_w and ((w <= 0).any() or not np.isfinite(w).all()):
+            raise ValueError("w must be > 0 and finite")
+
         tdigest_update_ndarray(self.tdigest, <np.PyArrayObject*>x,
                                <np.PyArrayObject*>w)
 
@@ -239,10 +234,8 @@ cdef class TDigest:
         factor : number
             The factor to scale the weights by. Must be > 0.
         """
-        if factor <= 0:
-            raise ValueError("factor must be > 0")
-        if not isfinite(factor):
-            raise ValueError("factor must be finite")
+        if factor <= 0 or not isfinite(factor):
+            raise ValueError("factor must be > 0 and finite")
         cdef TDigest out = copy(self)
         tdigest_scale(out.tdigest, factor)
         return out
