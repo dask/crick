@@ -57,7 +57,11 @@ cdef class TDigest:
     cdef tdigest_t *tdigest
 
     def __cinit__(self, compression=100.0):
+        if not isfinite(compression):
+            raise ValueError("Compression must be finite")
         self.tdigest = tdigest_new(compression)
+        if self.tdigest == NULL:
+            raise MemoryError()
 
     def __dealloc__(self):
         if self.tdigest != NULL:

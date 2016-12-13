@@ -92,6 +92,10 @@ def test_init():
     with pytest.raises(TypeError):
         TDigest('foo')
 
+    for c in [np.nan, np.inf, -np.inf]:
+        with pytest.raises(ValueError):
+            TDigest(c)
+
 
 def test_repr():
     t = TDigest(500)

@@ -47,6 +47,8 @@ typedef struct tdigest {
 
 tdigest_t *tdigest_new(double compression) {
     tdigest_t *T = (tdigest_t *)malloc(sizeof(*T));
+    if (T == NULL)
+        return NULL;
 
     // Clip compression to bounds
     if (compression < 20)
@@ -56,7 +58,7 @@ tdigest_t *tdigest_new(double compression) {
     T->compression = compression;
 
     // Select a good size and buffer_size
-    int size = 2 * compression + 0.5;
+    int size = 2 * ceil(compression);
     int buffer_size = (7.5 + 0.37*compression - 2e-4*compression*compression);
 
     T->min = DBL_MAX;
@@ -66,15 +68,30 @@ tdigest_t *tdigest_new(double compression) {
     T->total_weight = 0;
     T->last = 0;
     T->centroids = calloc(size, sizeof(centroid_t));
+    if (T->centroids == NULL)
+        goto fail;
     T->merge_centroids = calloc(size, sizeof(centroid_t));
+    if (T->merge_centroids == NULL)
+        goto fail;
 
     T->buffer_size = buffer_size;
     T->buffer_total_weight = 0;
     T->buffer_last = 0;
     T->buffer_centroids = calloc(buffer_size, sizeof(centroid_t));
+    if (T->buffer_centroids == NULL)
+        goto fail;
     T->buffer_sort = calloc(buffer_size, sizeof(centroid_t));
+    if (T->buffer_sort == NULL)
+        goto fail;
 
     return T;
+
+fail:
+    if (T->centroids != NULL) free(T->centroids);
+    if (T->merge_centroids != NULL) free(T->merge_centroids);
+    if (T->buffer_centroids != NULL) free(T->buffer_centroids);
+    if (T->buffer_sort != NULL) free(T->buffer_sort);
+    return NULL;
 }
 
 
@@ -247,7 +264,7 @@ void tdigest_flush(tdigest_t *T) {
 }
 
 
-void tdigest_add(tdigest_t *T, double x, double w) {
+static inline void tdigest_add(tdigest_t *T, double x, double w) {
     // w must be > 0 and finite, for speed we assume the caller has checked this
     assert(w > 0);
     assert(isfinite(w));
