@@ -6,7 +6,6 @@
 #include <float.h>
 #include <math.h>
 #include <assert.h>
-#include <stdio.h>
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
@@ -46,7 +45,7 @@ typedef struct tdigest {
 } tdigest_t;
 
 
-tdigest_t *tdigest_new(double compression) {
+static tdigest_t *tdigest_new(double compression) {
     tdigest_t *T = (tdigest_t *)malloc(sizeof(*T));
     if (T == NULL)
         return NULL;
@@ -96,7 +95,7 @@ fail:
 }
 
 
-void tdigest_free(tdigest_t *T) {
+static void tdigest_free(tdigest_t *T) {
     free(T->centroids);
     free(T->merge_centroids);
     free(T->buffer_centroids);
@@ -210,7 +209,7 @@ static double centroid_merge(tdigest_t *T, double weight_so_far, double k1,
 }
 
 
-void tdigest_flush(tdigest_t *T) {
+static void tdigest_flush(tdigest_t *T) {
     if (T->buffer_last == 0)
         return;
 
@@ -288,7 +287,7 @@ static inline void tdigest_add(tdigest_t *T, double x, double w) {
 }
 
 
-double tdigest_query_prep(tdigest_t *T) {
+static void tdigest_query_prep(tdigest_t *T) {
     // Prep for computing quantiles or cdf
     tdigest_flush(T);
 
@@ -324,9 +323,7 @@ static inline double interpolate(double x, double x0, double x1) {
 }
 
 
-double tdigest_cdf(tdigest_t *T, double x) {
-    tdigest_query_prep(T);
-
+static double tdigest_cdf(tdigest_t *T, double x) {
     if (T->total_weight == 0)
         return NAN;
     if (x < T->min)
@@ -353,9 +350,79 @@ double tdigest_cdf(tdigest_t *T, double x) {
 }
 
 
-double tdigest_quantile(tdigest_t *T, double q) {
-    tdigest_query_prep(T);
+static PyArrayObject *tdigest_cdf_ndarray(tdigest_t *T, PyArrayObject *x) {
+    NpyIter *iter = NULL;
+    NpyIter_IterNextFunc *iternext = NULL;
+    PyArrayObject *ret = NULL;
+    PyArrayObject *op[2] = {NULL};
+    npy_uint32 flags;
+    npy_uint32 op_flags[2];
+    PyArray_Descr *dtypes[2] = {NULL};
 
+    npy_intp *innersizeptr, *strideptr;
+    char **dataptr;
+
+    op[0] = x;
+    op[1] = NULL;
+    flags = NPY_ITER_EXTERNAL_LOOP | NPY_ITER_BUFFERED;
+    op_flags[0] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;
+    op_flags[1] = NPY_ITER_WRITEONLY | NPY_ITER_ALLOCATE | NPY_ITER_ALIGNED;
+
+    dtypes[0] = PyArray_DescrFromType(NPY_FLOAT64);
+    if (dtypes[0] == NULL) {
+        goto finish;
+    }
+    dtypes[1] = dtypes[0];
+    Py_INCREF(dtypes[1]);
+
+    iter = NpyIter_MultiNew(2, op, flags, NPY_KEEPORDER, NPY_SAFE_CASTING,
+                            op_flags, dtypes);
+    if (iter == NULL) {
+        goto finish;
+    }
+
+    iternext = NpyIter_GetIterNext(iter, NULL);
+    if (iternext == NULL) {
+        goto finish;
+    }
+    dataptr = NpyIter_GetDataPtrArray(iter);
+    strideptr = NpyIter_GetInnerStrideArray(iter);
+    innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
+
+    // Preprocess the centroids
+    tdigest_query_prep(T);
+    do {
+        char *data_x = dataptr[0];
+        char *data_out = dataptr[1];
+        npy_intp stride_x = strideptr[0];
+        npy_intp stride_out = strideptr[1];
+        npy_intp count = *innersizeptr;
+
+        while (count--) {
+            *(npy_float64 *)data_out = tdigest_cdf(T, *(npy_float64 *)data_x);
+
+            data_x += stride_x;
+            data_out += stride_out;
+        }
+    } while (iternext(iter));
+
+    ret = NpyIter_GetOperandArray(iter)[1];
+    Py_INCREF(ret);
+
+finish:
+    Py_XDECREF(dtypes[0]);
+    Py_XDECREF(dtypes[1]);
+    if (iter != NULL) {
+        if (NpyIter_Deallocate(iter) != NPY_SUCCEED) {
+            Py_XDECREF(ret);
+            ret = NULL;
+        }
+    }
+    return ret;
+}
+
+
+static double tdigest_quantile(tdigest_t *T, double q) {
     if (T->total_weight == 0)
         return NAN;
     if (q <= 0)
@@ -374,7 +441,79 @@ double tdigest_quantile(tdigest_t *T, double q) {
 }
 
 
-void tdigest_merge(tdigest_t *T, tdigest_t *other) {
+static PyArrayObject *tdigest_quantile_ndarray(tdigest_t *T, PyArrayObject *q) {
+    NpyIter *iter = NULL;
+    NpyIter_IterNextFunc *iternext = NULL;
+    PyArrayObject *ret = NULL;
+    PyArrayObject *op[2] = {NULL};
+    npy_uint32 flags;
+    npy_uint32 op_flags[2];
+    PyArray_Descr *dtypes[2] = {NULL};
+
+    npy_intp *innersizeptr, *strideptr;
+    char **dataptr;
+
+    op[0] = q;
+    op[1] = NULL;
+    flags = NPY_ITER_EXTERNAL_LOOP | NPY_ITER_BUFFERED;
+    op_flags[0] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;
+    op_flags[1] = NPY_ITER_WRITEONLY | NPY_ITER_ALLOCATE | NPY_ITER_ALIGNED;
+
+    dtypes[0] = PyArray_DescrFromType(NPY_FLOAT64);
+    if (dtypes[0] == NULL) {
+        goto finish;
+    }
+    dtypes[1] = dtypes[0];
+    Py_INCREF(dtypes[1]);
+
+    iter = NpyIter_MultiNew(2, op, flags, NPY_KEEPORDER, NPY_SAFE_CASTING,
+                            op_flags, dtypes);
+    if (iter == NULL) {
+        goto finish;
+    }
+
+    iternext = NpyIter_GetIterNext(iter, NULL);
+    if (iternext == NULL) {
+        goto finish;
+    }
+    dataptr = NpyIter_GetDataPtrArray(iter);
+    strideptr = NpyIter_GetInnerStrideArray(iter);
+    innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
+
+    // Preprocess the centroids
+    tdigest_query_prep(T);
+    do {
+        char *data_q = dataptr[0];
+        char *data_out = dataptr[1];
+        npy_intp stride_q = strideptr[0];
+        npy_intp stride_out = strideptr[1];
+        npy_intp count = *innersizeptr;
+
+        while (count--) {
+            *(npy_float64 *)data_out = tdigest_quantile(T, *(npy_float64 *)data_q);
+
+            data_q += stride_q;
+            data_out += stride_out;
+        }
+    } while (iternext(iter));
+
+    ret = NpyIter_GetOperandArray(iter)[1];
+    Py_INCREF(ret);
+
+finish:
+    Py_XDECREF(dtypes[0]);
+    Py_XDECREF(dtypes[1]);
+    if (iter != NULL) {
+        if (NpyIter_Deallocate(iter) != NPY_SUCCEED) {
+            Py_XDECREF(ret);
+            ret = NULL;
+        }
+    }
+    return ret;
+}
+
+
+static void tdigest_merge(tdigest_t *T, tdigest_t *other) {
     tdigest_flush(other);
     if (other->total_weight) {
         centroid_t *centroids = other->centroids;
@@ -387,7 +526,7 @@ void tdigest_merge(tdigest_t *T, tdigest_t *other) {
 }
 
 
-void tdigest_scale(tdigest_t *T, double factor) {
+static void tdigest_scale(tdigest_t *T, double factor) {
     tdigest_flush(T);
     double total_weight = 0;
     if (T->total_weight) {
@@ -409,7 +548,8 @@ void tdigest_scale(tdigest_t *T, double factor) {
 }
 
 
-npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x, PyArrayObject *w) {
+static npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x,
+                                       PyArrayObject *w) {
     NpyIter *iter = NULL;
     NpyIter_IterNextFunc *iternext;
     PyArrayObject *op[2];
