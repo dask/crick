@@ -230,6 +230,19 @@ def test_quantile_and_cdf_shape():
     assert res.shape == (2, 2)
 
 
+def test_quantile_and_cdf_monotonic_increasing():
+    # Check that quantile and cdf are monotonically increasing
+    # if given increasing inputs
+    t = TDigest()
+    t.update(np.random.normal(size=10000))
+    q = np.linspace(0, 1, 100, endpoint=True)
+    res = t.quantile(q)
+    assert (np.diff(res) > 0).all()
+    x = np.linspace(t.min(), t.max(), 100, endpoint=True)
+    res = t.cdf(x)
+    assert (np.diff(x) > 0).all()
+
+
 def test_weights():
     t = TDigest()
     t.add(1, 10)

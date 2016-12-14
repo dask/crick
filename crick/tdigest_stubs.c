@@ -303,6 +303,7 @@ static void tdigest_query_prep(tdigest_t *T) {
         T->merge_centroids[i - 1].weight = (a.mean + (b.mean - a.mean) *
                                             a.weight / (a.weight + b.weight));
     }
+    T->merge_centroids[T->last].weight = T->max;
 }
 
 
