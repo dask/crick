@@ -6,6 +6,8 @@ from setuptools import setup
 from setuptools.extension import Extension
 from Cython.Build import cythonize
 
+import versioneer
+
 
 kwargs = {'extra_compile_args': ['-std=c99']}
 
@@ -20,7 +22,8 @@ extensions = [Extension("crick.tdigest",
               ]
 
 setup(name='crick',
-      version='0.0.1',
+      version=versioneer.get_version(),
+      cmdclass=versioneer.get_cmdclass(),
       description='High performance approximate and streaming algorithms',
       long_description=(open('README.md').read() if exists('README.rst')
                         else ''),
