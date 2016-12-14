@@ -75,13 +75,13 @@ def test_distributions(data):
 
     # *Quantile
     q = np.array([0.001, 0.01, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99, 0.999])
-    est = np.array([t.quantile(i) for i in q])
+    est = t.quantile(q)
     q_est = quantiles_to_q(data, est)
     np.testing.assert_allclose(q, q_est, atol=0.012, rtol=0)
 
     # *CDF
     x = q_to_x(data, q)
-    q_est = np.array([t.cdf(i) for i in x])
+    q_est = t.cdf(x)
     np.testing.assert_allclose(q, q_est, atol=0.005)
 
 
@@ -171,7 +171,7 @@ def test_small_w():
     assert len(t.centroids()) == 0
 
 
-def test_non_numeric_errors():
+def test_update_non_numeric_errors():
     data = np.array(['foo', 'bar', 'baz'])
     t = TDigest()
 
@@ -186,6 +186,28 @@ def test_non_numeric_errors():
 
     with pytest.raises(TypeError):
         t.add(1, 'foo')
+
+
+def test_quantile_non_numeric():
+    t = TDigest()
+    t.update(np.arange(5))
+
+    with pytest.raises(TypeError):
+        t.quantile('foo')
+
+    with pytest.raises(TypeError):
+        t.update(['foo'])
+
+
+def test_cdf_non_numeric():
+    t = TDigest()
+    t.update(np.arange(5))
+
+    with pytest.raises(TypeError):
+        t.cdf('foo')
+
+    with pytest.raises(TypeError):
+        t.cdf(['foo'])
 
 
 def test_weights():
@@ -239,13 +261,13 @@ def test_merge():
 
     # *Quantile
     q = np.array([0.001, 0.01, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99, 0.999])
-    est = np.array([t.quantile(i) for i in q])
+    est = t.quantile(q)
     q_est = quantiles_to_q(data, est)
     np.testing.assert_allclose(q, q_est, atol=0.012, rtol=0)
 
     # *CDF
     x = q_to_x(data, q)
-    q_est = np.array([t.cdf(i) for i in x])
+    q_est = t.cdf(x)
     np.testing.assert_allclose(q, q_est, atol=0.005)
 
     with pytest.raises(TypeError):

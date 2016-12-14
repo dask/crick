@@ -34,9 +34,9 @@ cdef extern from "tdigest_stubs.c":
     void tdigest_flush(tdigest_t *T)
     void tdigest_merge(tdigest_t *T, tdigest_t *other)
     void tdigest_scale(tdigest_t *T, double factor)
-    double tdigest_quantile(tdigest_t *T, double q)
-    double tdigest_cdf(tdigest_t *T, double x)
     np.npy_intp tdigest_update_ndarray(tdigest_t *T, np.PyArrayObject *x, np.PyArrayObject *w) except -1
+    np.PyArrayObject *tdigest_quantile_ndarray(tdigest_t *T, np.PyArrayObject *q) except NULL
+    np.PyArrayObject *tdigest_cdf_ndarray(tdigest_t *T, np.PyArrayObject *x) except NULL
 
 
 CENTROID_DTYPE = np.dtype([('mean', np.float64), ('weight', np.float64)])
@@ -100,7 +100,7 @@ cdef class TDigest:
         The sum of the weights on all centroids."""
         return self.tdigest.total_weight + self.tdigest.buffer_total_weight
 
-    def cdf(self, double x):
+    def cdf(self, x):
         """cdf(self, x)
 
         Compute an estimate of the fraction of all points added to this digest
@@ -108,11 +108,16 @@ cdef class TDigest:
 
         Parameters
         ----------
-        x : float
+        x : array_like or float
         """
-        return tdigest_cdf(self.tdigest, x)
+        x = np.array([x]) if np.isscalar(x) else np.asarray(x)
+        if not np.can_cast(x, 'f8', casting='safe'):
+            raise TypeError("x must be numeric")
+        if not np.isfinite(x).all():
+            raise ValueError("x must be finite")
+        return <np.ndarray>tdigest_cdf_ndarray(self.tdigest, <np.PyArrayObject*>x)
 
-    def quantile(self, double q):
+    def quantile(self, q):
         """quantile(self, q)
 
         Compute an estimate of the qth percentile of the data added to
@@ -120,10 +125,15 @@ cdef class TDigest:
 
         Parameters
         ----------
-        q : float
+        q : array_like or float
             A number between 0 and 1 inclusive.
         """
-        return tdigest_quantile(self.tdigest, q)
+        q = np.array([q]) if np.isscalar(q) else np.asarray(q)
+        if not np.can_cast(q, 'f8', casting='safe'):
+            raise TypeError("q must be numeric")
+        if not np.isfinite(q).all():
+            raise ValueError("q must be finite")
+        return <np.ndarray>tdigest_quantile_ndarray(self.tdigest, <np.PyArrayObject*>q)
 
     def centroids(self):
         """centroids(self)
