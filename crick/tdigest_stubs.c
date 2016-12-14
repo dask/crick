@@ -6,6 +6,7 @@
 #include <float.h>
 #include <math.h>
 #include <assert.h>
+#include <stdio.h>
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
@@ -287,13 +288,44 @@ static inline void tdigest_add(tdigest_t *T, double x, double w) {
 }
 
 
+double tdigest_query_prep(tdigest_t *T) {
+    // Prep for computing quantiles or cdf
+    tdigest_flush(T);
+
+    centroid_t a, b = T->centroids[0];
+    T->merge_centroids[0].mean = 0;
+
+    for (int i = 1; i < T->last + 1; i++) {
+        a = b;
+        b = T->centroids[i];
+
+        T->merge_centroids[i].mean = (T->merge_centroids[i - 1].mean +
+                                      T->centroids[i].weight);
+        T->merge_centroids[i - 1].weight = (a.mean + (b.mean - a.mean) *
+                                            a.weight / (a.weight + b.weight));
+    }
+}
+
+
+static inline int bisect(centroid_t *arr, double index, int lo, int hi) {
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+        if (arr[mid].mean < index)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
+
 static inline double interpolate(double x, double x0, double x1) {
     return (x - x0) / (x1 - x0);
 }
 
 
 double tdigest_cdf(tdigest_t *T, double x) {
-    tdigest_flush(T);
+    tdigest_query_prep(T);
 
     if (T->total_weight == 0)
         return NAN;
@@ -308,35 +340,21 @@ double tdigest_cdf(tdigest_t *T, double x) {
         return interpolate(x, T->min, T->max);
     }
 
-    double r = 0;
-    double left = 0, right=0;
-    centroid_t a, b = {T->min, 0};
-
-    for (int i = 0; i < T->last + 1; i++) {
-        a = b;
-        b = T->centroids[i];
-
-        right = (b.mean - a.mean) * a.weight / (a.weight + b.weight);
-
-        if (x < a.mean + right) {
-            double value = (r + a.weight * interpolate(x, a.mean - left, a.mean + right)) / T->total_weight;
-            return value > 0.0 ? value : 0.0;
-        }
-
-        r += a.weight;
-        left = b.mean - (a.mean + right);
+    int i = bisect(T->centroids, x, 0, T->last + 1);
+    double l = (i > 0) ? T->merge_centroids[i - 1].weight : T->min;
+    double r = (i < T->last) ? T->merge_centroids[i].weight : T->max;
+    if (x < l) {
+        r = l;
+        l = --i ? T->merge_centroids[i - 1].weight : T->min;
     }
-
-    a = b;
-    right = T->max - a.mean;
-    if (x < a.mean + right)
-        return (r + a.weight * interpolate(x, a.mean - left, a.mean + right)) / T->total_weight;
-    return 1;
+    double weight = (i > 0) ? T->merge_centroids[i - 1].mean : 0;
+    return ((weight + T->centroids[i].weight * interpolate(x, l, r)) /
+            T->total_weight);
 }
 
 
 double tdigest_quantile(tdigest_t *T, double q) {
-    tdigest_flush(T);
+    tdigest_query_prep(T);
 
     if (T->total_weight == 0)
         return NAN;
@@ -348,34 +366,11 @@ double tdigest_quantile(tdigest_t *T, double q) {
         return T->centroids[0].mean;
 
     double index = q * T->total_weight;
-    double weight_so_far = 0;
-    double left, right = T->min;
-    centroid_t a, b = T->centroids[0];
-
-    for (int i = 1; i < T->last + 1; i++) {
-        a = b;
-        b = T->centroids[i];
-
-        left = right;
-        right = (b.weight * a.mean + a.weight * b.mean) / (a.weight + b.weight);
-
-        if (index < weight_so_far + a.weight) {
-            double p = (index - weight_so_far) / a.weight;
-            return left * (1 - p) + right * p;
-        }
-        weight_so_far += a.weight;
-    }
-
-    left = right;
-    right = T->max;
-    a = b;
-
-    if (index < weight_so_far + a.weight) {
-        double p = (index - weight_so_far) / a.weight;
-        return left * (1 - p) + right * p;
-    } else {
-        return T->max;
-    }
+    int i = bisect(T->merge_centroids, index, 0, T->last + 1);
+    double l = (i > 0) ? T->merge_centroids[i - 1].weight : T->min;
+    double r = (i < T->last) ? T->merge_centroids[i].weight : T->max;
+    double weight = (i > 0) ? T->merge_centroids[i - 1].mean : 0;
+    return l + (r - l) * (index - weight) / T->centroids[i].weight;
 }
 
 
