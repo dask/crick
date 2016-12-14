@@ -2,4 +2,5 @@
 
 [![Build Status](https://travis-ci.org/jcrist/crick.svg?branch=master)](https://travis-ci.org/jcrist/crick)
 
-Streaming algorithms in python. WIP, do not use.
+Crick is a fast library of approximate and streaming algorithms. It is still a
+work in progress, use at your own risk.

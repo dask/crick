@@ -1,4 +1,5 @@
 import sys
+from os.path import exists
 
 import numpy as np
 from setuptools import setup
@@ -20,6 +21,15 @@ extensions = [Extension("crick.tdigest",
 
 setup(name='crick',
       version='0.0.1',
-      packages=['crick'],
+      description='High performance approximate and streaming algorithms',
+      long_description=(open('README.md').read() if exists('README.rst')
+                        else ''),
+      keywords='streaming approximate algorithms',
+      url='https://github.com/jcrist/crick',
+      maintainer='Jim Crist',
+      maintainer_email='crist042@umn.edu',
+      license='BSD',
+      packages=['crick', 'crick.tests'],
       ext_modules=cythonize(extensions),
-      include_dirs=[np.get_include()])
+      include_dirs=[np.get_include()],
+      zip_safe=False)
