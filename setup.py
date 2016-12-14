@@ -25,7 +25,7 @@ setup(name='crick',
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass(),
       description='High performance approximate and streaming algorithms',
-      long_description=(open('README.md').read() if exists('README.rst')
+      long_description=(open('README.rst').read() if exists('README.rst')
                         else ''),
       keywords='streaming approximate algorithms',
       url='https://github.com/jcrist/crick',
