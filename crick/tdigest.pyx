@@ -110,12 +110,15 @@ cdef class TDigest:
         ----------
         x : array_like or float
         """
-        x = np.array([x]) if np.isscalar(x) else np.asarray(x)
+        x = np.asarray(x)
         if not np.can_cast(x, 'f8', casting='safe'):
             raise TypeError("x must be numeric")
         if not np.isfinite(x).all():
             raise ValueError("x must be finite")
-        return <np.ndarray>tdigest_cdf_ndarray(self.tdigest, <np.PyArrayObject*>x)
+        out = <np.ndarray>tdigest_cdf_ndarray(self.tdigest, <np.PyArrayObject*>x)
+        if out.ndim == 0:
+            return np.float64(out)
+        return out
 
     def quantile(self, q):
         """quantile(self, q)
@@ -128,12 +131,15 @@ cdef class TDigest:
         q : array_like or float
             A number between 0 and 1 inclusive.
         """
-        q = np.array([q]) if np.isscalar(q) else np.asarray(q)
+        q = np.asarray(q)
         if not np.can_cast(q, 'f8', casting='safe'):
             raise TypeError("q must be numeric")
         if not np.isfinite(q).all():
             raise ValueError("q must be finite")
-        return <np.ndarray>tdigest_quantile_ndarray(self.tdigest, <np.PyArrayObject*>q)
+        out = <np.ndarray>tdigest_quantile_ndarray(self.tdigest, <np.PyArrayObject*>q)
+        if out.ndim == 0:
+            return np.float64(out)
+        return out
 
     def centroids(self):
         """centroids(self)
@@ -201,14 +207,9 @@ cdef class TDigest:
         w : array_like, optional
             The weight (or weights) of the values to add. Default is 1.
         """
-        x = np.array([x]) if np.isscalar(x) else np.asarray(x)
-        if np.isscalar(w):
-            # Don't check w in the common case where w is 1
-            check_w = w != 1
-            w = np.array([w])
-        else:
-            check_w = True
-            w = np.asarray(w)
+        x = np.asarray(x)
+        check_w = not (np.isscalar(w) and w == 1)
+        w = np.asarray(w)
 
         if not np.can_cast(x, 'f8', casting='safe'):
             raise TypeError("x must be numeric")

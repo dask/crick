@@ -364,7 +364,7 @@ static PyArrayObject *tdigest_cdf_ndarray(tdigest_t *T, PyArrayObject *x) {
 
     op[0] = x;
     op[1] = NULL;
-    flags = NPY_ITER_EXTERNAL_LOOP | NPY_ITER_BUFFERED;
+    flags = NPY_ITER_EXTERNAL_LOOP | NPY_ITER_BUFFERED | NPY_ITER_ZEROSIZE_OK;
     op_flags[0] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;
     op_flags[1] = NPY_ITER_WRITEONLY | NPY_ITER_ALLOCATE | NPY_ITER_ALIGNED;
 
@@ -455,7 +455,7 @@ static PyArrayObject *tdigest_quantile_ndarray(tdigest_t *T, PyArrayObject *q) {
 
     op[0] = q;
     op[1] = NULL;
-    flags = NPY_ITER_EXTERNAL_LOOP | NPY_ITER_BUFFERED;
+    flags = NPY_ITER_EXTERNAL_LOOP | NPY_ITER_BUFFERED | NPY_ITER_ZEROSIZE_OK;
     op_flags[0] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;
     op_flags[1] = NPY_ITER_WRITEONLY | NPY_ITER_ALLOCATE | NPY_ITER_ALIGNED;
 

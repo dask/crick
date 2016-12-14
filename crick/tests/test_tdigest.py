@@ -188,7 +188,7 @@ def test_update_non_numeric_errors():
         t.add(1, 'foo')
 
 
-def test_quantile_non_numeric():
+def test_quantile_and_cdf_non_numeric():
     t = TDigest()
     t.update(np.arange(5))
 
@@ -198,16 +198,36 @@ def test_quantile_non_numeric():
     with pytest.raises(TypeError):
         t.update(['foo'])
 
-
-def test_cdf_non_numeric():
-    t = TDigest()
-    t.update(np.arange(5))
-
     with pytest.raises(TypeError):
         t.cdf('foo')
 
     with pytest.raises(TypeError):
         t.cdf(['foo'])
+
+
+def test_quantile_and_cdf_shape():
+    t = TDigest()
+    t.update(np.arange(5))
+
+    assert isinstance(t.quantile(0.5), np.float64)
+    assert isinstance(t.cdf(2), np.float64)
+
+    res = t.quantile(())
+    assert res.shape == (0,)
+    res = t.cdf(())
+    assert res.shape == (0,)
+
+    q = np.array([0.5, 0.9])
+    res = t.quantile(q)
+    assert res.shape == (2,)
+    res = t.cdf(q)
+    assert res.shape == (2,)
+
+    q = np.array([[0.5, 0.9], [0, 1]])
+    res = t.quantile(q)
+    assert res.shape == (2, 2)
+    res = t.cdf(q)
+    assert res.shape == (2, 2)
 
 
 def test_weights():
