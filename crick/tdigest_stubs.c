@@ -292,14 +292,13 @@ static void tdigest_query_prep(tdigest_t *T) {
     tdigest_flush(T);
 
     centroid_t a, b = T->centroids[0];
-    T->merge_centroids[0].mean = 0;
+    T->merge_centroids[0].mean = b.weight;
 
     for (int i = 1; i < T->last + 1; i++) {
         a = b;
         b = T->centroids[i];
 
-        T->merge_centroids[i].mean = (T->merge_centroids[i - 1].mean +
-                                      T->centroids[i].weight);
+        T->merge_centroids[i].mean = T->merge_centroids[i - 1].mean + b.weight;
         T->merge_centroids[i - 1].weight = (a.mean + (b.mean - a.mean) *
                                             a.weight / (a.weight + b.weight));
     }
@@ -337,6 +336,11 @@ static double tdigest_cdf(tdigest_t *T, double x) {
             return 0.5;
         return interpolate(x, T->min, T->max);
     }
+    // Equality checks only apply if > 1 centroid
+    if (x == T->max)
+        return 1;
+    if (x == T->min)
+        return 0;
 
     int i = bisect(T->centroids, x, 0, T->last + 1);
     double l = (i > 0) ? T->merge_centroids[i - 1].weight : T->min;

@@ -3,6 +3,7 @@ from libc.math cimport NAN, isfinite
 
 from copy import copy
 
+cimport cython
 cimport numpy as np
 import numpy as np
 
@@ -42,6 +43,13 @@ cdef extern from "tdigest_stubs.c":
 CENTROID_DTYPE = np.dtype([('mean', np.float64), ('weight', np.float64)])
 
 
+@cython.boundscheck(False)
+cdef inline void _cdf_to_hist(double[:] cdf, double[:]  hist, double size, int hist_size):
+    cdef size_t i
+    for i in range(hist_size):
+        hist[i] = (cdf[i + 1] - cdf[i]) * size
+
+
 cdef class TDigest:
     """TDigest(compression=100.0)
 
@@ -76,7 +84,7 @@ cdef class TDigest:
         """The compression factor for this digest"""
         return self.tdigest.compression
 
-    def min(self):
+    cpdef double min(self):
         """min(self)
 
         The minimum value in the digest."""
@@ -85,7 +93,7 @@ cdef class TDigest:
             return self.tdigest.min
         return NAN
 
-    def max(self):
+    cpdef double max(self):
         """max(self)
 
         The maximum value in the digest."""
@@ -94,7 +102,7 @@ cdef class TDigest:
             return self.tdigest.max
         return NAN
 
-    def size(self):
+    cpdef double size(self):
         """size(self)
 
         The sum of the weights on all centroids."""
@@ -141,6 +149,70 @@ cdef class TDigest:
             return np.float64(out)
         return out
 
+    def histogram(self, bins=10, range=None):
+        """histogram(self, bins=10, range=None)
+
+        Compute a histogram from the digest.
+
+        Parameters
+        ----------
+        bins : int or array_like, optional
+            If ``bins`` is an int, it defines the number of equal width bins in
+            the given range. If ``bins`` is an array_like, the values define
+            the edges of the bins (rightmost edge inclusive), allowing for
+            non-uniform bin widths. The default is 10.
+
+        range : (float, float), optional
+            The lower and upper bounds to use when generating bins. If not
+            provided, the digest bounds ``(t.min(), t.max())`` are used. Note
+            that this option is ignored if the bin edges are provided
+            explicitly.
+
+        Returns
+        -------
+        hist : array
+            The values of the histogram.
+        bin_edges : array
+            The edges of the bins. ``len(bin_edges) == len(hist) + 1``.
+        """
+        cdef double left = 0
+        cdef double right = 0
+        cdef double size = self.size()
+        if range is None:
+            if size != 0:
+                left = self.min()
+                right = self.max()
+        else:
+            left = <double?>range[0]
+            right = <double?>range[1]
+            if not isfinite(left) and isfinite(right):
+                raise ValueError("range parameters must be finite")
+            elif right < left:
+                raise ValueError("max must be larger than min for range "
+                                 "parameter")
+        if right == left:
+            left -= 0.5
+            right += 0.5
+
+        if isinstance(bins, int):
+            if bins < 1:
+                raise ValueError("bins must be >= 1")
+            bin_edges = np.linspace(left, right, bins + 1, endpoint=True)
+        else:
+            bin_edges = np.asarray(bins).astype('f8', copy=False)
+            if bin_edges.ndim != 1:
+                raise ValueError("bins must be a 1-dimensional array")
+            elif (np.diff(bin_edges) < 0).any():
+                raise ValueError("bins must increase monotonically")
+
+        cdef int hist_size = bin_edges.size - 1
+        cdef np.ndarray[double, ndim=1] hist = np.zeros(hist_size,
+                                                        dtype=np.float64)
+        if size != 0:
+            _cdf_to_hist(self.cdf(bin_edges), hist, size, hist_size)
+
+        return hist, bin_edges
+
     def centroids(self):
         """centroids(self)
 
@@ -154,7 +226,7 @@ cdef class TDigest:
         else:
             n = self.tdigest.last + 1
 
-        cdef np.ndarray result = np.empty(n, dtype=CENTROID_DTYPE)
+        cdef np.ndarray[centroid_t, ndim=1] result = np.empty(n, dtype=CENTROID_DTYPE)
         if n > 0:
             memcpy(result.data, self.tdigest.centroids, n * sizeof(centroid_t))
         return result

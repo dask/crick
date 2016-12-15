@@ -64,6 +64,21 @@ def q_to_x(data, q):
     return x
 
 
+def check_valid_quantile_and_cdf(t):
+    min = t.min()
+    max = t.max()
+    # Quantile
+    q = np.linspace(0, 1, 100, endpoint=True)
+    res = t.quantile(q)
+    assert (np.diff(res) > 0).all()
+    assert ((min <= res) & (res <= max)).all()
+
+    x = np.linspace(min, max, 100, endpoint=True)
+    res = t.cdf(x)
+    assert (np.diff(x) > 0).all()
+    assert ((res >= 0) & (res <= 1)).all()
+
+
 @pytest.mark.parametrize('data', distributions)
 def test_distributions(data):
     t = TDigest()
@@ -72,6 +87,8 @@ def test_distributions(data):
     assert t.size() == len(data)
     assert t.min() == data.min()
     assert t.max() == data.max()
+
+    check_valid_quantile_and_cdf(t)
 
     # *Quantile
     q = np.array([0.001, 0.01, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99, 0.999])
@@ -217,30 +234,102 @@ def test_quantile_and_cdf_shape():
     res = t.cdf(())
     assert res.shape == (0,)
 
-    q = np.array([0.5, 0.9])
-    res = t.quantile(q)
-    assert res.shape == (2,)
-    res = t.cdf(q)
-    assert res.shape == (2,)
-
-    q = np.array([[0.5, 0.9], [0, 1]])
-    res = t.quantile(q)
-    assert res.shape == (2, 2)
-    res = t.cdf(q)
-    assert res.shape == (2, 2)
+    qs = [np.array([0.5, 0.9]),
+          np.array([[0.5, 0.9], [0, 1]]),
+          np.linspace(0, 1, 100)[10:-10:2]]
+    for q in qs:
+        res = t.quantile(q)
+        assert res.shape == q.shape
+        res = t.cdf(q)
+        assert res.shape == q.shape
 
 
-def test_quantile_and_cdf_monotonic_increasing():
-    # Check that quantile and cdf are monotonically increasing
-    # if given increasing inputs
+def test_histogram():
     t = TDigest()
-    t.update(np.random.normal(size=10000))
-    q = np.linspace(0, 1, 100, endpoint=True)
-    res = t.quantile(q)
-    assert (np.diff(res) > 0).all()
-    x = np.linspace(t.min(), t.max(), 100, endpoint=True)
-    res = t.cdf(x)
-    assert (np.diff(x) > 0).all()
+    data = np.random.normal(size=10000)
+    t.update(data)
+    hist, bins = t.histogram(100)
+    assert len(hist) == 100
+    assert len(bins) == 101
+    c = t.cdf(bins)
+    np.testing.assert_allclose((c[1:] - c[:-1]) * t.size(), hist)
+
+    min = t.min()
+    max = t.max()
+    eps = np.finfo('f8').eps
+    bins = np.array([min - 1, min - eps,
+                     min, min + (max - min)/2, max,
+                     max + eps, max + 1])
+    hist, bins2 = t.histogram(bins)
+    np.testing.assert_allclose(bins, bins2)
+    assert hist[0] == 0
+    assert hist[1] == 0
+    assert hist[-2] == 0
+    assert hist[-1] == 0
+    assert hist.sum() == t.size()
+
+    # range ignored when bins provided
+    hist2, bins2 = t.histogram(bins, range=(-5, -3))
+    np.testing.assert_allclose(hist, hist2)
+    np.testing.assert_allclose(bins, bins2)
+
+
+def test_histogram_small_n():
+    t = TDigest()
+    t.add(1)
+
+    hist, bins = t.histogram(10)
+    assert len(hist) == 10
+    assert len(bins) == 11
+    assert bins[0] == 0.5
+    assert bins[-1] == 1.5
+    assert hist.sum() == 1
+
+    t.add(2)
+    hist, bins = t.histogram(10)
+    assert hist.sum() == 2
+    assert bins[0] == 1
+    assert bins[-1] == 2
+
+    hist, bins = t.histogram(range=(-5, -3))
+    assert hist.sum() == 0
+
+
+def test_histogram_empty():
+    t = TDigest()
+    for b, r in [(5, None), (5, (-1, 1)), (np.arange(6), None)]:
+        hist, bins = t.histogram(bins=b, range=r)
+        assert len(hist) == 5
+        assert len(bins) == 6
+        if r is not None:
+            assert bins[0] == r[0]
+            assert bins[-1] == r[1]
+        assert (hist == 0).all()
+        assert (np.diff(bins) > 0).all()
+
+
+def test_histogram_errors():
+    t = TDigest()
+    t.update(np.random.uniform(1000))
+
+    for r in [('a', 'b'), 1]:
+        with pytest.raises(TypeError):
+            t.histogram(range=r)
+
+    with pytest.raises(Exception):
+        t.histogram(range=1)
+
+    for v in [np.nan, np.inf, -np.inf]:
+        with pytest.raises(ValueError):
+            t.histogram(range=(v, 1))
+
+    with pytest.raises(ValueError):
+        t.histogram(range=(1, 0))
+
+    for b in ['a', -1, np.arange(4).reshape((2, 2)),
+              np.arange(0, 10, -1), np.array([np.nan, 0, 1])]:
+        with pytest.raises(ValueError):
+            t.histogram(bins=b)
 
 
 def test_weights():
