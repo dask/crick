@@ -18,6 +18,10 @@ if '--debug' in sys.argv:
 
 extensions = [Extension("crick.tdigest",
                         ['crick/tdigest.pyx'],
+                        **kwargs),
+              Extension("crick.space_saving",
+                        ['crick/space_saving.pyx'],
+                        include_dirs=['crick/klib'],
                         **kwargs)
               ]
 
