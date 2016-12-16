@@ -7,7 +7,7 @@ import numpy as np
 np.import_array()
 
 
-cdef extern from "space_saving_stubs.c":
+cdef extern from "stream_summary_stubs.c":
     ctypedef struct counter_int64_t:
         size_t next
         size_t prev
