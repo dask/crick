@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include <python.h>
+#include <Python.h>
 
 #include "khash.h"
 
