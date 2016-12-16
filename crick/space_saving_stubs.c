@@ -1,7 +1,7 @@
-#include <python.h>
 #include <stdlib.h>
+#include <python.h>
+
 #include "khash.h"
-#include <signal.h>
 
 
 // The value indicating missingess
@@ -31,6 +31,18 @@ typedef PyObject* kh_pyobject_t;
 
 KHASH_INIT(object, kh_pyobject_t, size_t, 1, kh_python_hash_func,
            kh_python_hash_equal)
+
+
+
+// Helpers for viewing floats as ints, and ints as floats
+// Used for the float64 dtype
+static inline khint64_t asint64(double key) {
+  return *(khint64_t *)(&key);
+}
+
+static inline double asfloat64(khint64_t key) {
+  return *(double *)(&key);
+}
 
 
 /* Macros for creating summary implementations for different dtypes
@@ -102,8 +114,7 @@ static inline void summary_##name##_counter_insert(summary_##name##_t *T,       
             break;                                                                      \
         prev = T->counters[prev].prev;                                                  \
         if (prev == tail) {                                                             \
-            if (T->head != tail)                                                        \
-                T->head = c;                                                            \
+            T->head = c;                                                                \
             break;                                                                      \
         }                                                                               \
     }                                                                                   \
