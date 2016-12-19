@@ -233,12 +233,7 @@ cdef class StreamSummary:
         Returns a numpy array of all the counters in the summary. Note that
         this array is a *copy* of the internal data.
         """
-        if np.PyDataType_ISOBJECT(self.dtype):
-            return object_counters(<summary_object_t*>self.summary, self.size())
-        elif np.PyDataType_ISFLOAT(self.dtype):
-            return float64_counters(<summary_float64_t*>self.summary, self.size())
-        else:
-            return int64_counters(<summary_int64_t*>self.summary, self.size())
+        return self.topk(self.size())
 
     def __reduce__(self):
         return (StreamSummary, (self.capacity, self.dtype), self.__getstate__())
