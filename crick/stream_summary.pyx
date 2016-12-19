@@ -1,5 +1,5 @@
 cimport cython
-from cpython.ref cimport PyObject
+from cpython.ref cimport PyObject, Py_INCREF
 
 cimport numpy as np
 import numpy as np
@@ -9,40 +9,98 @@ np.import_array()
 
 cdef extern from "stream_summary_stubs.c":
     ctypedef struct counter_int64_t:
-        size_t next
-        size_t prev
         np.int64_t item
         long count
         long error
 
+    ctypedef struct counter_float64_t:
+        np.float64_t item
+        long count
+        long error
+
     ctypedef struct counter_object_t:
-        size_t next
-        size_t prev
         PyObject *item
         long count
         long error
 
-    ctypedef struct summary_int64_t:
+    ctypedef struct node_int64_t:
+        size_t next
+        size_t prev
+        counter_int64_t counter
+
+    ctypedef struct node_float64_t:
+        size_t next
+        size_t prev
+        counter_float64_t counter
+
+    ctypedef struct node_object_t:
+        size_t next
+        size_t prev
+        counter_object_t counter
+
+    ctypedef struct summary_t:
         size_t capacity
-        size_t n_counters
+        size_t size
         size_t head
-        counter_int64_t *counters
+
+    ctypedef struct summary_int64_t:
+        size_t size
+        size_t head
+        node_int64_t *list
+
+    ctypedef struct summary_float64_t:
+        size_t size
+        size_t head
+        node_float64_t *list
 
     ctypedef struct summary_object_t:
-        size_t capacity
-        size_t n_counters
+        size_t size
         size_t head
-        counter_object_t *counters
+        node_object_t *list
 
     summary_int64_t *summary_int64_new(int capacity)
     void summary_int64_free(summary_int64_t *T)
     int summary_int64_add(summary_int64_t *T, np.int64_t item, int count) except -1
+    int summary_int64_set_state(summary_int64_t *T, counter_int64_t *counters, size_t size) except -1
+
+    summary_float64_t *summary_float64_new(int capacity)
+    void summary_float64_free(summary_float64_t *T)
+    int summary_float64_add(summary_float64_t *T, np.float64_t item, int count) except -1
+    int summary_float64_set_state(summary_float64_t *T, counter_float64_t *counters, size_t size) except -1
 
     summary_object_t *summary_object_new(int capacity)
     void summary_object_free(summary_object_t *T)
     int summary_object_add(summary_object_t *T, object item, int count) except -1
-    np.int64_t asint64(np.float64_t key)
-    np.float64_t asfloat64(np.int64_t key)
+    int summary_object_set_state(summary_object_t *T, counter_object_t *counters, size_t size) except -1
+
+
+# Repeat struct definition for numpy
+cdef np.dtype COUNTER_INT64_DTYPE = np.dtype(
+        {'names': ['item', 'count', 'error'],
+         'formats': [np.int64, np.int64, np.int64],
+         'offsets': [<size_t> &(<counter_int64_t*> NULL).item,
+                     <size_t> &(<counter_int64_t*> NULL).count,
+                     <size_t> &(<counter_int64_t*> NULL).error
+                     ]
+         })
+
+cdef np.dtype COUNTER_FLOAT64_DTYPE = np.dtype(
+        {'names': ['item', 'count', 'error'],
+         'formats': [np.float64, np.int64, np.int64],
+         'offsets': [<size_t> &(<counter_float64_t*> NULL).item,
+                     <size_t> &(<counter_float64_t*> NULL).count,
+                     <size_t> &(<counter_float64_t*> NULL).error
+                     ]
+         })
+
+cdef np.dtype COUNTER_OBJECT_DTYPE = np.dtype(
+        {'names': ['item', 'count', 'error'],
+         'formats': [np.object, np.int64, np.int64],
+         'offsets': [<size_t> &(<counter_object_t*> NULL).item,
+                     <size_t> &(<counter_object_t*> NULL).count,
+                     <size_t> &(<counter_object_t*> NULL).error
+                     ]
+         })
 
 
 class TopKResult(tuple):
@@ -117,7 +175,7 @@ cdef class StreamSummary:
        International Conference on Database Theory. Springer Berlin Heidelberg,
        2005.
     """
-    cdef void *summary
+    cdef summary_t *summary
     cdef readonly np.dtype dtype
 
     def __cinit__(self, int capacity=20, dtype=float):
@@ -128,11 +186,11 @@ cdef class StreamSummary:
         self.dtype = dtype
 
         if np.PyDataType_ISOBJECT(dtype):
-            self.summary = <void *>summary_object_new(capacity)
+            self.summary = <summary_t *>summary_object_new(capacity)
         elif np.PyDataType_ISINTEGER(dtype):
-            self.summary = <void *>summary_int64_new(capacity)
+            self.summary = <summary_t *>summary_int64_new(capacity)
         elif np.PyDataType_ISFLOAT(dtype):
-            self.summary = <void *>summary_int64_new(capacity)
+            self.summary = <summary_t *>summary_float64_new(capacity)
         else:
             raise ValueError("dtype %s not supported" % dtype)
 
@@ -143,8 +201,10 @@ cdef class StreamSummary:
         if self.summary != NULL:
             if np.PyDataType_ISOBJECT(self.dtype):
                 summary_object_free(<summary_object_t *>self.summary)
-            else:
+            elif np.PyDataType_ISINTEGER(self.dtype):
                 summary_int64_free(<summary_int64_t *>self.summary)
+            else:
+                summary_float64_free(<summary_float64_t *>self.summary)
 
     def __repr__(self):
         return ("SpaceSaving<capacity={0}, dtype={1}, "
@@ -152,13 +212,48 @@ cdef class StreamSummary:
 
     @property
     def capacity(self):
-        return (<summary_int64_t *>self.summary).capacity
+        return self.summary.capacity
 
     cpdef int size(self):
         """size(self)
 
         The number of active counters."""
-        return (<summary_int64_t *>self.summary).n_counters
+        return self.summary.size
+
+    def counters(self):
+        """centroids(self)
+
+        Returns a numpy array of all the counters in the summary. Note that
+        this array is a *copy* of the internal data.
+        """
+        if np.PyDataType_ISOBJECT(self.dtype):
+            return object_counters(<summary_object_t*>self.summary, self.size())
+        elif np.PyDataType_ISFLOAT(self.dtype):
+            return float64_counters(<summary_float64_t*>self.summary, self.size())
+        else:
+            return int64_counters(<summary_int64_t*>self.summary, self.size())
+
+    def __reduce__(self):
+        return (StreamSummary, (self.capacity, self.dtype), self.__getstate__())
+
+    def __getstate__(self):
+        return self.counters()
+
+    def __setstate__(self, state):
+        cdef np.ndarray counters = state
+        cdef size = len(counters)
+        if np.PyDataType_ISOBJECT(self.dtype):
+            return summary_object_set_state(<summary_object_t*>self.summary,
+                                            <counter_object_t*>counters.data,
+                                            size)
+        elif np.PyDataType_ISFLOAT(self.dtype):
+            return summary_float64_set_state(<summary_float64_t*>self.summary,
+                                             <counter_float64_t*>counters.data,
+                                             size)
+        else:
+            return summary_int64_set_state(<summary_int64_t*>self.summary,
+                                           <counter_int64_t*>counters.data,
+                                           size)
 
     def add(self, item, int count=1):
         """add(self, item, count=1)
@@ -176,88 +271,100 @@ cdef class StreamSummary:
 
         if np.PyDataType_ISOBJECT(self.dtype):
             summary_object_add(<summary_object_t *>self.summary, item, count)
-            return
-
-        cdef np.int64_t item2
-
-        if np.PyDataType_ISFLOAT(self.dtype):
-            item2 = asint64(<double>item)
+        elif np.PyDataType_ISFLOAT(self.dtype):
+            summary_float64_add(<summary_float64_t *>self.summary, item, count)
         else:
-            item2 = <np.int64_t>item
-        summary_int64_add(<summary_int64_t *>self.summary, item2, count)
+            summary_int64_add(<summary_int64_t *>self.summary, item, count)
 
-    def topk(self, int k):
+    def topk(self, int k, asarray=True):
         """Estimate the top k elements.
 
         Parameters
         ----------
         k : int
             The number of most frequent elements to estimate.
+        asarray : bool, optional
+            If True [default], the result is a numpy record array, otherwise
+            it's a list of ``TopKResult`` tuples.
 
         Returns
         -------
-        topk : list of TopKResult
-            Returns a list of ``TopKResult`` tuples. The list will be of length
-            ``min(self.size(), k)``
+        topk : array or list of TopKResult
+            Returns a record array, or a list of ``TopKResult`` tuples. In both
+            cases, the result has the following fields:
+
+            - item: The item
+            - count: The estimated frequency.
+            - error: An upper bound on the error for ``count``. The number of
+                     occurrences of ``item`` is guaranteed to be in
+                     ``count <= actual <= count + error``.
         """
         if k <= 0:
             raise ValueError("k must be > 0")
-        k = min(self.size(), k)
 
         if np.PyDataType_ISOBJECT(self.dtype):
-            return object_topk(<summary_object_t*>self.summary, k)
+            return object_counters(<summary_object_t*>self.summary, k)
         elif np.PyDataType_ISFLOAT(self.dtype):
-            return float64_topk(<summary_int64_t*>self.summary, k)
+            return float64_counters(<summary_float64_t*>self.summary, k)
         else:
-            return int64_topk(<summary_int64_t*>self.summary, k)
+            return int64_counters(<summary_int64_t*>self.summary, k)
 
 
-cdef list object_topk(summary_object_t *summary, int k):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef int64_counters(summary_int64_t *summary, int k):
     cdef:
         int i = summary.head
         int count
-        counter_object_t c
-        list out = []
+        node_int64_t c
+        np.ndarray[counter_int64_t, ndim=1] out
 
+    k = min(summary.size, k)
+    out = np.empty(k, dtype=COUNTER_INT64_DTYPE)
     for count in range(k):
-        c = summary.counters[i]
-        out.append(TopKResult(<object>c.item,
-                              c.count,
-                              c.error))
+        c = summary.list[i]
+        out[count] = c.counter
         i = c.next
 
     return out
 
 
-cdef list int64_topk(summary_int64_t *summary, int k):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef float64_counters(summary_float64_t *summary, int k):
     cdef:
         int i = summary.head
         int count
-        counter_int64_t c
-        list out = []
+        node_float64_t c
+        np.ndarray[counter_float64_t, ndim=1] out
 
+    k = min(summary.size, k)
+    out = np.empty(k, dtype=COUNTER_FLOAT64_DTYPE)
     for count in range(k):
-        c = summary.counters[i]
-        out.append(TopKResult(c.item,
-                              c.count,
-                              c.error))
+        c = summary.list[i]
+        out[count] = c.counter
         i = c.next
 
     return out
 
 
-cdef list float64_topk(summary_int64_t *summary, int k):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef object_counters(summary_object_t *summary, int k):
     cdef:
         int i = summary.head
         int count
-        counter_int64_t c
-        list out = []
+        node_object_t c
+        np.ndarray out
+        counter_object_t *data
+
+    k = min(summary.size, k)
+    out = np.empty(k, dtype=COUNTER_OBJECT_DTYPE)
+    data = <counter_object_t *>out.data
 
     for count in range(k):
-        c = summary.counters[i]
-        out.append(TopKResult(asfloat64(c.item),
-                              c.count,
-                              c.error))
+        c = summary.list[i]
+        Py_INCREF(<object>c.counter.item)
+        data[count] = c.counter
         i = c.next
-
     return out
