@@ -62,6 +62,8 @@ cdef extern from "stream_summary_stubs.c":
     void summary_int64_free(summary_int64_t *T)
     int summary_int64_add(summary_int64_t *T, np.int64_t item, int count) except -1
     int summary_int64_set_state(summary_int64_t *T, counter_int64_t *counters, size_t size) except -1
+    np.npy_intp summary_int64_update_ndarray(summary_int64_t *T, np.PyArrayObject *item,
+                                             np.PyArrayObject *count) except -1
 
     summary_float64_t *summary_float64_new(int capacity)
     void summary_float64_free(summary_float64_t *T)
@@ -72,6 +74,8 @@ cdef extern from "stream_summary_stubs.c":
     void summary_object_free(summary_object_t *T)
     int summary_object_add(summary_object_t *T, object item, int count) except -1
     int summary_object_set_state(summary_object_t *T, counter_object_t *counters, size_t size) except -1
+    np.npy_intp summary_object_update_ndarray(summary_object_t *T, np.PyArrayObject *item,
+                                              np.PyArrayObject *count) except -1
 
 
 # Repeat struct definition for numpy
@@ -207,7 +211,7 @@ cdef class StreamSummary:
                 summary_float64_free(<summary_float64_t *>self.summary)
 
     def __repr__(self):
-        return ("SpaceSaving<capacity={0}, dtype={1}, "
+        return ("StreamSummary<capacity={0}, dtype={1}, "
                 "size={2}>").format(self.capacity, self.dtype, self.size())
 
     @property
@@ -221,7 +225,7 @@ cdef class StreamSummary:
         return self.summary.size
 
     def counters(self):
-        """centroids(self)
+        """counters(self)
 
         Returns a numpy array of all the counters in the summary. Note that
         this array is a *copy* of the internal data.
@@ -276,8 +280,33 @@ cdef class StreamSummary:
         else:
             summary_int64_add(<summary_int64_t *>self.summary, item, count)
 
+    def update(self, item, count=1):
+        """update(self, item, count=1)"""
+        item = np.asarray(item)
+        check_count = not (np.isscalar(count) and count == 1)
+        count = np.asarray(count)
+
+        item = item.astype(self.dtype, casting='safe', copy=False)
+        count = count.astype(self.dtype, casting='safe', copy=False)
+
+        if check_count and (count <= 0).any():
+            raise ValueError("count must be > 0")
+
+        if np.PyDataType_ISOBJECT(self.dtype):
+            summary_object_update_ndarray(<summary_object_t *>self.summary,
+                                          <np.PyArrayObject*>item,
+                                          <np.PyArrayObject*>count)
+        else:
+            if np.PyDataType_ISFLOAT(self.dtype):
+                item = item.view('i8')
+            summary_int64_update_ndarray(<summary_int64_t *>self.summary,
+                                         <np.PyArrayObject*>item,
+                                         <np.PyArrayObject*>count)
+
     def topk(self, int k, asarray=True):
-        """Estimate the top k elements.
+        """topk(self, k, asarray=True)
+
+        Estimate the top k elements.
 
         Parameters
         ----------
@@ -299,15 +328,19 @@ cdef class StreamSummary:
                      occurrences of ``item`` is guaranteed to be in
                      ``count <= actual <= count + error``.
         """
+        cdef np.ndarray out
         if k <= 0:
             raise ValueError("k must be > 0")
 
         if np.PyDataType_ISOBJECT(self.dtype):
-            return object_counters(<summary_object_t*>self.summary, k)
+            out = object_counters(<summary_object_t*>self.summary, k)
         elif np.PyDataType_ISFLOAT(self.dtype):
-            return float64_counters(<summary_float64_t*>self.summary, k)
+            out = float64_counters(<summary_float64_t*>self.summary, k)
         else:
-            return int64_counters(<summary_int64_t*>self.summary, k)
+            out = int64_counters(<summary_int64_t*>self.summary, k)
+        if asarray:
+            return out
+        return [TopKResult(*i) for i in out]
 
 
 @cython.boundscheck(False)

@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <Python.h>
-#include <signal.h>
+#include <numpy/arrayobject.h>
 
 #include "khash.h"
 
@@ -257,17 +257,107 @@ static int summary_##name##_set_state(summary_##name##_t *T,                    
 }
 
 
-#define INIT_SUMMARY(name, item_t, refcount)        \
+#define INIT_SUMMARY_NUMPY(name, item_t, DTYPE)                                 \
+static npy_intp summary_##name##_update_ndarray(summary_##name##_t *T,          \
+                                                PyArrayObject *x,               \
+                                                PyArrayObject *w) {             \
+    NpyIter *iter = NULL;                                                       \
+    NpyIter_IterNextFunc *iternext;                                             \
+    PyArrayObject *op[2];                                                       \
+    npy_uint32 flags;                                                           \
+    npy_uint32 op_flags[2];                                                     \
+    PyArray_Descr *dtypes[2] = {NULL};                                          \
+                                                                                \
+    npy_intp *innersizeptr, *strideptr;                                         \
+    char **dataptr;                                                             \
+                                                                                \
+    npy_intp ret = -1;                                                          \
+                                                                                \
+    /* Handle zero-sized arrays specially */                                    \
+    if (PyArray_SIZE(x) == 0 || PyArray_SIZE(w) == 0) {                         \
+        return 0;                                                               \
+    }                                                                           \
+                                                                                \
+    op[0] = x;                                                                  \
+    op[1] = w;                                                                  \
+    flags = NPY_ITER_EXTERNAL_LOOP | NPY_ITER_BUFFERED | NPY_ITER_REFS_OK;      \
+    op_flags[0] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;                         \
+    op_flags[1] = NPY_ITER_READONLY | NPY_ITER_ALIGNED;                         \
+                                                                                \
+    dtypes[0] = PyArray_DescrFromType(DTYPE);                                   \
+    if (dtypes[0] == NULL) {                                                    \
+        goto finish;                                                            \
+    }                                                                           \
+    Py_INCREF(dtypes[0]);                                                       \
+    dtypes[1] = PyArray_DescrFromType(NPY_INT64);                               \
+    if (dtypes[1] == NULL) {                                                    \
+        goto finish;                                                            \
+    }                                                                           \
+    Py_INCREF(dtypes[1]);                                                       \
+                                                                                \
+    iter = NpyIter_MultiNew(2, op, flags, NPY_KEEPORDER, NPY_SAFE_CASTING,      \
+                            op_flags, dtypes);                                  \
+    if (iter == NULL) {                                                         \
+        goto finish;                                                            \
+    }                                                                           \
+                                                                                \
+    iternext = NpyIter_GetIterNext(iter, NULL);                                 \
+    if (iternext == NULL) {                                                     \
+        goto finish;                                                            \
+    }                                                                           \
+    dataptr = NpyIter_GetDataPtrArray(iter);                                    \
+    strideptr = NpyIter_GetInnerStrideArray(iter);                              \
+    innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);                           \
+                                                                                \
+    NPY_BEGIN_THREADS_DEF;                                                      \
+    if (NpyIter_IterationNeedsAPI(iter))                                        \
+        NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));               \
+                                                                                \
+    do {                                                                        \
+        char *data_x = dataptr[0];                                              \
+        char *data_w = dataptr[1];                                              \
+        npy_intp stride_x = strideptr[0];                                       \
+        npy_intp stride_w = strideptr[1];                                       \
+        npy_intp count = *innersizeptr;                                         \
+                                                                                \
+        while (count--) {                                                       \
+            summary_##name##_add(T, *(item_t *)data_x,                          \
+                                 *(npy_int64 *)data_w);                         \
+                                                                                \
+            data_x += stride_x;                                                 \
+            data_w += stride_w;                                                 \
+        }                                                                       \
+    } while (iternext(iter));                                                   \
+                                                                                \
+    NPY_END_THREADS;                                                            \
+                                                                                \
+    ret = 0;                                                                    \
+                                                                                \
+finish:                                                                         \
+    Py_XDECREF(dtypes[0]);                                                      \
+    Py_XDECREF(dtypes[1]);                                                      \
+    if (iter != NULL) {                                                         \
+        if (NpyIter_Deallocate(iter) != NPY_SUCCEED) {                          \
+            return -1;                                                          \
+        }                                                                       \
+    }                                                                           \
+    return ret;                                                                 \
+}
+
+
+#define INIT_SUMMARY(name, item_t, refcount, DTYPE) \
     INIT_SUMMARY_TYPES(name, name, item_t)          \
-    INIT_SUMMARY_METHODS(name, item_t, refcount)
+    INIT_SUMMARY_METHODS(name, item_t, refcount)    \
+    INIT_SUMMARY_NUMPY(name, item_t, DTYPE)
 
 
-INIT_SUMMARY(int64, khint64_t, 0)
-INIT_SUMMARY(object, PyObject*, 1)
-INIT_SUMMARY_TYPES(float64, int64, double)
+INIT_SUMMARY(int64, khint64_t, 0, NPY_INT64)
+INIT_SUMMARY(object, PyObject*, 1, NPY_OBJECT)
 
 /* float64 definitions are just a thin wrapper around int64, viewing the bytes
  * as int64 */
+
+INIT_SUMMARY_TYPES(float64, int64, double)
 
 static inline khint64_t asint64(double key) {
   return *(khint64_t *)(&key);
