@@ -8,18 +8,14 @@ np.import_array()
 
 
 cdef extern from "stream_summary_stubs.c":
+    ctypedef struct summary_t:
+        size_t capacity
+        size_t size
+        size_t head
+
+    # int64
     ctypedef struct counter_int64_t:
         np.int64_t item
-        long count
-        long error
-
-    ctypedef struct counter_float64_t:
-        np.float64_t item
-        long count
-        long error
-
-    ctypedef struct counter_object_t:
-        PyObject *item
         long count
         long error
 
@@ -28,35 +24,10 @@ cdef extern from "stream_summary_stubs.c":
         size_t prev
         counter_int64_t counter
 
-    ctypedef struct node_float64_t:
-        size_t next
-        size_t prev
-        counter_float64_t counter
-
-    ctypedef struct node_object_t:
-        size_t next
-        size_t prev
-        counter_object_t counter
-
-    ctypedef struct summary_t:
-        size_t capacity
-        size_t size
-        size_t head
-
     ctypedef struct summary_int64_t:
         size_t size
         size_t head
         node_int64_t *list
-
-    ctypedef struct summary_float64_t:
-        size_t size
-        size_t head
-        node_float64_t *list
-
-    ctypedef struct summary_object_t:
-        size_t size
-        size_t head
-        node_object_t *list
 
     summary_int64_t *summary_int64_new(int capacity)
     void summary_int64_free(summary_int64_t *T)
@@ -65,10 +36,42 @@ cdef extern from "stream_summary_stubs.c":
     np.npy_intp summary_int64_update_ndarray(summary_int64_t *T, np.PyArrayObject *item,
                                              np.PyArrayObject *count) except -1
 
+    # float64
+    ctypedef struct counter_float64_t:
+        np.float64_t item
+        long count
+        long error
+
+    ctypedef struct node_float64_t:
+        size_t next
+        size_t prev
+        counter_float64_t counter
+
+    ctypedef struct summary_float64_t:
+        size_t size
+        size_t head
+        node_float64_t *list
+
     summary_float64_t *summary_float64_new(int capacity)
     void summary_float64_free(summary_float64_t *T)
     int summary_float64_add(summary_float64_t *T, np.float64_t item, int count) except -1
     int summary_float64_set_state(summary_float64_t *T, counter_float64_t *counters, size_t size) except -1
+
+    # object
+    ctypedef struct counter_object_t:
+        PyObject *item
+        long count
+        long error
+
+    ctypedef struct node_object_t:
+        size_t next
+        size_t prev
+        counter_object_t counter
+
+    ctypedef struct summary_object_t:
+        size_t size
+        size_t head
+        node_object_t *list
 
     summary_object_t *summary_object_new(int capacity)
     void summary_object_free(summary_object_t *T)
