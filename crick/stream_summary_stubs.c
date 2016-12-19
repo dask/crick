@@ -24,14 +24,8 @@ static inline int pyobject_cmp(PyObject* a, PyObject* b) {
 	}
 	return result;
 }
-#define kh_python_hash_func(key) (PyObject_Hash(key))
-#define kh_python_hash_equal(a, b) (pyobject_cmp(a, b))
 
-typedef PyObject* kh_pyobject_t;
-
-
-KHASH_INIT(object, kh_pyobject_t, size_t, 1, kh_python_hash_func,
-           kh_python_hash_equal)
+KHASH_INIT(object, PyObject*, size_t, 1, PyObject_Hash, pyobject_cmp)
 
 
 /* Generic Summary struct, used for casting to access the consistent fields */
@@ -48,11 +42,11 @@ typedef struct {
  * Note that these expect the KHASH_INIT for the equivalent dtype to
  * already be called. */
 
-#define INIT_SUMMARY_TYPES(name, hash, item_t)\
+#define INIT_SUMMARY_TYPES(name, item_t)    \
 typedef struct {                            \
     item_t item;                            \
-    long count;                             \
-    long error;                             \
+    npy_int64 count;                        \
+    npy_int64 error;                        \
 } counter_##name##_t;                       \
                                             \
 typedef struct {                            \
@@ -64,7 +58,7 @@ typedef struct {                            \
 typedef struct summary_##name##_s {         \
     SUMMARY_HEAD                            \
     node_##name##_t *list;                  \
-    khash_t(hash) *hashmap;                 \
+    khash_t(name) *hashmap;                 \
 } summary_##name##_t;
 
 
@@ -108,7 +102,7 @@ static inline void summary_##name##_free(summary_##name##_t *T) {               
                                                                                 \
 static inline void summary_##name##_counter_insert(summary_##name##_t *T,       \
                                                    size_t c, size_t prev) {     \
-    long count = T->list[c].counter.count;                                      \
+    npy_int64 count = T->list[c].counter.count;                                 \
     size_t tail = T->list[T->head].prev;                                        \
     while(1) {                                                                  \
         if (T->list[prev].counter.count >= count)                               \
@@ -127,8 +121,8 @@ static inline void summary_##name##_counter_insert(summary_##name##_t *T,       
                                                                                 \
                                                                                 \
 static inline size_t summary_##name##_counter_new(summary_##name##_t *T,        \
-                                                  item_t item, long count,      \
-                                                  long error) {                 \
+                                                  item_t item, npy_int64 count, \
+                                                  npy_int64 error) {            \
     if (refcount)                                                               \
         Py_INCREF(item);                                                        \
     size_t c = T->size;                                                         \
@@ -152,7 +146,8 @@ static inline size_t summary_##name##_counter_new(summary_##name##_t *T,        
                                                                                 \
                                                                                 \
 static inline size_t summary_##name##_replace_min(summary_##name##_t *T,        \
-                                                  item_t item, long count) {    \
+                                                  item_t item,                  \
+                                                  npy_int64 count) {            \
     size_t tail = T->list[T->head].prev;                                        \
                                                                                 \
     /* Remove the min item from the hashmap */                                  \
@@ -188,7 +183,7 @@ static inline void summary_##name##_rebalance(summary_##name##_t *T,            
                                                                                 \
                                                                                 \
 static inline int summary_##name##_add(summary_##name##_t *T,                   \
-                                       item_t item, int count) {                \
+                                       item_t item, npy_int64 count) {          \
     int absent;                                                                 \
     size_t index;                                                               \
                                                                                 \
@@ -258,7 +253,7 @@ static int summary_##name##_set_state(summary_##name##_t *T,                    
 
 
 #define INIT_SUMMARY_NUMPY(name, item_t, DTYPE)                                 \
-static npy_intp summary_##name##_update_ndarray(summary_##name##_t *T,          \
+static int summary_##name##_update_ndarray(summary_##name##_t *T,               \
                                                 PyArrayObject *x,               \
                                                 PyArrayObject *w) {             \
     NpyIter *iter = NULL;                                                       \
@@ -346,39 +341,17 @@ finish:                                                                         
 
 
 #define INIT_SUMMARY(name, item_t, refcount, DTYPE) \
-    INIT_SUMMARY_TYPES(name, name, item_t)          \
+    INIT_SUMMARY_TYPES(name, item_t)                \
     INIT_SUMMARY_METHODS(name, item_t, refcount)    \
     INIT_SUMMARY_NUMPY(name, item_t, DTYPE)
 
 
-INIT_SUMMARY(int64, khint64_t, 0, NPY_INT64)
+INIT_SUMMARY(int64, npy_int64, 0, NPY_INT64)
 INIT_SUMMARY(object, PyObject*, 1, NPY_OBJECT)
 
 /* float64 definitions are just a thin wrapper around int64, viewing the bytes
- * as int64 */
+ * as int64. Define a small helper to view float64 as int64: */
 
-INIT_SUMMARY_TYPES(float64, int64, double)
-
-static inline khint64_t asint64(double key) {
-  return *(khint64_t *)(&key);
-}
-
-static inline summary_float64_t *summary_float64_new(int capacity) {
-    return (summary_float64_t *)summary_int64_new(capacity);
-}
-
-static inline void summary_float64_free(summary_float64_t *T) {
-    summary_int64_free((summary_int64_t *)T);
-}
-
-static inline int summary_float64_add(summary_float64_t *T, double item,
-                                      long count) {
-    return summary_int64_add((summary_int64_t *)T, asint64(item), count);
-}
-
-static inline int summary_float64_set_state(summary_float64_t *T,
-                                            counter_float64_t *counters,
-                                            size_t size) {
-    return summary_int64_set_state((summary_int64_t *)T,
-                                   (counter_int64_t *)counters, size);
+static inline npy_int64 asint64(npy_float64 key) {
+  return *(npy_int64 *)(&key);
 }
