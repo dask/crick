@@ -152,10 +152,12 @@ static inline size_t summary_##name##_replace_min(summary_##name##_t *T,        
                                                                                 \
     /* Remove the min item from the hashmap */                                  \
     item_t min_item = T->list[tail].counter.item;                               \
-    if (refcount)                                                               \
-        Py_DECREF(min_item);                                                    \
     khiter_t iter = kh_get(name, T->hashmap, min_item);                         \
     kh_del(name, T->hashmap, iter);                                             \
+    if (refcount) {                                                             \
+        Py_DECREF(min_item);                                                    \
+        Py_INCREF(item);                                                        \
+    }                                                                           \
                                                                                 \
     T->list[tail].counter.item = item;                                          \
     T->list[tail].counter.error = T->list[tail].counter.count;                  \
@@ -305,7 +307,7 @@ static int summary_##name##_update_ndarray(summary_##name##_t *T,               
     innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);                           \
                                                                                 \
     NPY_BEGIN_THREADS_DEF;                                                      \
-    if (NpyIter_IterationNeedsAPI(iter))                                        \
+    if (!NpyIter_IterationNeedsAPI(iter))                                       \
         NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));               \
                                                                                 \
     do {                                                                        \

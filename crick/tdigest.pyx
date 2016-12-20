@@ -251,7 +251,7 @@ cdef class TDigest:
             self.tdigest.last = n - 1
 
     def add(self, double x, double w=1):
-        """add(self, x, w)
+        """add(self, x, w=1)
 
         Add a sample to this digest.
 
@@ -268,7 +268,7 @@ cdef class TDigest:
         tdigest_add(self.tdigest, x, w)
 
     def update(self, x, w=1):
-        """update(self, x, w)
+        """update(self, x, w=1)
 
         Add many samples to this digest.
 
