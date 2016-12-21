@@ -13,7 +13,7 @@
  * These map the items to counters for each dtype */
 
 // int64 dtypes
-KHASH_MAP_INIT_INT64(int64, size_t)
+KHASH_MAP_INIT_INT64(int64, npy_intp)
 
 // object dtype
 static inline int pyobject_cmp(PyObject* a, PyObject* b) {
@@ -25,14 +25,14 @@ static inline int pyobject_cmp(PyObject* a, PyObject* b) {
 	return result;
 }
 
-KHASH_INIT(object, PyObject*, size_t, 1, PyObject_Hash, pyobject_cmp)
+KHASH_INIT(object, PyObject*, npy_intp, 1, PyObject_Hash, pyobject_cmp)
 
 
 /* Generic Summary struct, used for casting to access the consistent fields */
 #define SUMMARY_HEAD   \
-    size_t capacity;   \
-    size_t size;       \
-    size_t head;
+    npy_intp capacity; \
+    npy_intp size;     \
+    npy_intp head;
 
 typedef struct {
     SUMMARY_HEAD
@@ -50,8 +50,8 @@ typedef struct {                            \
 } counter_##name##_t;                       \
                                             \
 typedef struct {                            \
-    size_t next;                            \
-    size_t prev;                            \
+    npy_intp next;                          \
+    npy_intp prev;                          \
     counter_##name##_t counter;             \
 } node_##name##_t;                          \
                                             \
@@ -110,8 +110,8 @@ static inline int counter_##name##_ge(counter_##name##_t c1,                    
                                                                                 \
                                                                                 \
 static inline void summary_##name##_counter_insert(summary_##name##_t *T,       \
-                                                   size_t c, size_t prev) {     \
-    size_t tail = T->list[T->head].prev;                                        \
+                                                   npy_intp c, npy_intp prev) { \
+    npy_intp tail = T->list[T->head].prev;                                      \
     while(1) {                                                                  \
         if (counter_##name##_ge(T->list[prev].counter,                          \
                                 T->list[c].counter, 0))                         \
@@ -129,12 +129,12 @@ static inline void summary_##name##_counter_insert(summary_##name##_t *T,       
 }                                                                               \
                                                                                 \
                                                                                 \
-static inline size_t summary_##name##_counter_new(summary_##name##_t *T,        \
+static inline npy_intp summary_##name##_counter_new(summary_##name##_t *T,      \
                                                   item_t item, npy_int64 count, \
                                                   npy_int64 error) {            \
     if (refcount)                                                               \
         Py_INCREF(item);                                                        \
-    size_t c = T->size;                                                         \
+    npy_intp c = T->size;                                                       \
     T->size++;                                                                  \
                                                                                 \
     T->list[c].counter.item = item;                                             \
@@ -147,7 +147,7 @@ static inline size_t summary_##name##_counter_new(summary_##name##_t *T,        
         T->list[c].next = c;                                                    \
     }                                                                           \
     else {                                                                      \
-        size_t tail = T->list[T->head].prev;                                    \
+        npy_intp tail = T->list[T->head].prev;                                  \
         summary_##name##_counter_insert(T, c, tail);                            \
     }                                                                           \
     return c;                                                                   \
@@ -155,12 +155,12 @@ static inline size_t summary_##name##_counter_new(summary_##name##_t *T,        
                                                                                 \
                                                                                 \
 static inline void summary_##name##_rebalance(summary_##name##_t *T,            \
-                                              size_t index) {                   \
+                                              npy_intp index) {                 \
     if (T->head == index) {                                                     \
         /* Counts can only increase */                                          \
         return;                                                                 \
     }                                                                           \
-    size_t prev = T->list[index].prev;                                          \
+    npy_intp prev = T->list[index].prev;                                        \
                                                                                 \
     if (counter_##name##_ge(T->list[prev].counter,                              \
                             T->list[index].counter, 0))                         \
@@ -174,7 +174,7 @@ static inline void summary_##name##_rebalance(summary_##name##_t *T,            
                                                                                 \
                                                                                 \
 static inline int summary_##name##_swap(summary_##name##_t *T,                  \
-                                        size_t index, item_t item,              \
+                                        npy_intp index, item_t item,            \
                                         npy_int64 count, npy_int64 error) {     \
     /* Remove the old item from the hashmap */                                  \
     item_t old_item = T->list[index].counter.item;                              \
@@ -198,7 +198,7 @@ static inline int summary_##name##_swap(summary_##name##_t *T,                  
 static inline int summary_##name##_add(summary_##name##_t *T,                   \
                                        item_t item, npy_int64 count) {          \
     int absent;                                                                 \
-    size_t index;                                                               \
+    npy_intp index;                                                             \
                                                                                 \
     /* Get the pointer to the bucket */                                         \
     khiter_t iter = kh_put(name, T->hashmap, item, &absent);                    \
@@ -235,9 +235,9 @@ static inline int summary_##name##_add(summary_##name##_t *T,                   
                                                                                 \
 static int summary_##name##_set_state(summary_##name##_t *T,                    \
                                       counter_##name##_t *counters,             \
-                                      size_t size) {                            \
+                                      npy_intp size) {                          \
     int absent;                                                                 \
-    size_t index;                                                               \
+    npy_intp index;                                                             \
     if (size > T->capacity) {                                                   \
         PyErr_SetString(PyExc_ValueError,                                       \
                         "deserialization failed, size > capacity");             \
@@ -286,7 +286,7 @@ static int summary_##name##_merge(summary_##name##_t *T1,                       
         m2 = T2->list[T2->list[T2->head].prev].counter.count;                   \
                                                                                 \
     /* Iterate through T1, updating it inplace */                               \
-    size_t i1, i2;                                                              \
+    npy_intp i1, i2;                                                            \
     for (i1 = 0; i1 < T1->size; i1++) {                                         \
         khiter_t iter = kh_get(name, T2->hashmap, T1->list[i1].counter.item);   \
                                                                                 \

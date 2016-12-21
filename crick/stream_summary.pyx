@@ -11,9 +11,9 @@ cdef extern from "stream_summary_stubs.c":
     np.int64_t asint64(np.float64_t key)
 
     ctypedef struct summary_t:
-        size_t capacity
-        size_t size
-        size_t head
+        np.intp_t capacity
+        np.intp_t size
+        np.intp_t head
 
     # int64
     ctypedef struct counter_int64_t:
@@ -22,20 +22,20 @@ cdef extern from "stream_summary_stubs.c":
         np.int64_t error
 
     ctypedef struct node_int64_t:
-        size_t next
-        size_t prev
+        np.intp_t next
+        np.intp_t prev
         counter_int64_t counter
 
     ctypedef struct summary_int64_t:
-        size_t size
-        size_t head
+        np.intp_t size
+        np.intp_t head
         node_int64_t *list
 
     summary_int64_t *summary_int64_new(int capacity)
     void summary_int64_free(summary_int64_t *T)
     int summary_int64_add(summary_int64_t *T, np.int64_t item, np.int64_t count) except -1
     int summary_int64_merge(summary_int64_t *T1, summary_int64_t *T2) except -1
-    int summary_int64_set_state(summary_int64_t *T, counter_int64_t *counters, size_t size) except -1
+    int summary_int64_set_state(summary_int64_t *T, counter_int64_t *counters, np.intp_t size) except -1
     int summary_int64_update_ndarray(summary_int64_t *T, np.PyArrayObject *item,
                                      np.PyArrayObject *count) except -1
 
@@ -46,20 +46,20 @@ cdef extern from "stream_summary_stubs.c":
         np.int64_t error
 
     ctypedef struct node_object_t:
-        size_t next
-        size_t prev
+        np.intp_t next
+        np.intp_t prev
         counter_object_t counter
 
     ctypedef struct summary_object_t:
-        size_t size
-        size_t head
+        np.intp_t size
+        np.intp_t head
         node_object_t *list
 
     summary_object_t *summary_object_new(int capacity)
     void summary_object_free(summary_object_t *T)
     int summary_object_add(summary_object_t *T, object item, np.int64_t count) except -1
     int summary_object_merge(summary_object_t *T1, summary_object_t *T2) except -1
-    int summary_object_set_state(summary_object_t *T, counter_object_t *counters, size_t size) except -1
+    int summary_object_set_state(summary_object_t *T, counter_object_t *counters, np.intp_t size) except -1
     int summary_object_update_ndarray(summary_object_t *T, np.PyArrayObject *item,
                                       np.PyArrayObject *count) except -1
 
@@ -223,7 +223,7 @@ cdef class StreamSummary:
 
     def __setstate__(self, state):
         cdef np.ndarray counters = state
-        cdef size_t size = len(counters)
+        cdef np.intp_t size = len(counters)
         if np.PyDataType_ISOBJECT(self.dtype):
             summary_object_set_state(<summary_object_t*>self.summary,
                                      <counter_object_t*>counters.data,
