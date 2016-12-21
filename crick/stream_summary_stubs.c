@@ -100,12 +100,21 @@ static inline void summary_##name##_free(summary_##name##_t *T) {               
 }                                                                               \
                                                                                 \
                                                                                 \
+static inline int counter_##name##_ge(counter_##name##_t c1,                    \
+                                      counter_##name##_t c2,                    \
+                                      npy_int64 offset) {                       \
+    npy_int64 count = c2.count + offset;                                        \
+    npy_int64 error = c2.error + offset;                                        \
+    return (c1.count > count || (c1.count == count && c1.error <= error));      \
+}                                                                               \
+                                                                                \
+                                                                                \
 static inline void summary_##name##_counter_insert(summary_##name##_t *T,       \
                                                    size_t c, size_t prev) {     \
-    npy_int64 count = T->list[c].counter.count;                                 \
     size_t tail = T->list[T->head].prev;                                        \
     while(1) {                                                                  \
-        if (T->list[prev].counter.count >= count)                               \
+        if (counter_##name##_ge(T->list[prev].counter,                          \
+                                T->list[c].counter, 0))                         \
             break;                                                              \
         prev = T->list[prev].prev;                                              \
         if (prev == tail) {                                                     \
@@ -153,7 +162,8 @@ static inline void summary_##name##_rebalance(summary_##name##_t *T,            
     }                                                                           \
     size_t prev = T->list[index].prev;                                          \
                                                                                 \
-    if (T->list[prev].counter.count >= T->list[index].counter.count)            \
+    if (counter_##name##_ge(T->list[prev].counter,                              \
+                            T->list[index].counter, 0))                         \
         return;                                                                 \
                                                                                 \
     /* Counter needs to be moved. Remove then insert. */                        \
@@ -257,6 +267,7 @@ static int summary_##name##_set_state(summary_##name##_t *T,                    
     return 1;                                                                   \
 }                                                                               \
                                                                                 \
+                                                                                \
 static int summary_##name##_merge(summary_##name##_t *T1,                       \
                                   summary_##name##_t *T2) {                     \
     /* Nothing to do */                                                         \
@@ -275,8 +286,8 @@ static int summary_##name##_merge(summary_##name##_t *T1,                       
         m2 = T2->list[T2->list[T2->head].prev].counter.count;                   \
                                                                                 \
     /* Iterate through T1, updating it inplace */                               \
-    size_t i2, i1 = T1->head;                                                   \
-    for (int i = 0; i < T1->size; i++) {                                        \
+    size_t i1, i2;                                                              \
+    for (i1 = 0; i1 < T1->size; i1++) {                                         \
         khiter_t iter = kh_get(name, T2->hashmap, T1->list[i1].counter.item);   \
                                                                                 \
         if (refcount && PyErr_Occurred()) return -1;                            \
@@ -293,25 +304,23 @@ static int summary_##name##_merge(summary_##name##_t *T1,                       
             T1->list[i1].counter.error += m2;                                   \
         }                                                                       \
         summary_##name##_rebalance(T1, i1);                                     \
-        i1 = T1->list[i1].next;                                                 \
     }                                                                           \
                                                                                 \
     /* Iterate through T2, adding in any missing items */                       \
     i2 = T2->head;                                                              \
     for (int i = 0; i < T2->size; i++) {                                        \
         int absent;                                                             \
-        khiter_t iter = kh_put(name, T1->hashmap,                               \
-                               T2->list[i2].counter.item, &absent);             \
+        counter_##name##_t c2 = T2->list[i2].counter;                           \
+        khiter_t iter = kh_put(name, T1->hashmap, c2.item, &absent);            \
         if (refcount && PyErr_Occurred()) return -1;                            \
                                                                                 \
         if (absent > 0) {                                                       \
             /* Item isn't in T1, maybe add it */                                \
-            counter_##name##_t c2 = T2->list[i2].counter;                       \
             if (T1->size == T1->capacity) {                                     \
                 i1 = T1->list[T1->head].prev;                                   \
                                                                                 \
                 /* If all counts in T1 are >= T2 + m1 then we're done here */   \
-                if (T1->list[i1].counter.count >= c2.count + m1) break;         \
+                if (counter_##name##_ge(T1->list[i1].counter, c2, m1)) break;   \
                                                                                 \
                 int err = summary_##name##_swap(T1, i1, c2.item, c2.count + m1, \
                                                 c2.error + m1);                 \
@@ -425,6 +434,7 @@ finish:                                                                         
     INIT_SUMMARY_TYPES(name, item_t)                \
     INIT_SUMMARY_METHODS(name, item_t, refcount)    \
     INIT_SUMMARY_NUMPY(name, item_t, DTYPE)
+
 
 
 INIT_SUMMARY(int64, npy_int64, 0, NPY_INT64)

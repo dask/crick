@@ -207,13 +207,13 @@ cdef class StreamSummary:
         The number of active counters."""
         return self.summary.size
 
-    def counters(self):
+    def counters(self, astuples=False):
         """counters(self)
 
         Returns a numpy array of all the counters in the summary. Note that
         this array is a *copy* of the internal data.
         """
-        return self.topk(self.size())
+        return self.topk(self.size(), astuples=astuples)
 
     def __reduce__(self):
         return (StreamSummary, (self.capacity, self.dtype), self.__getstate__())
@@ -344,16 +344,14 @@ cdef class StreamSummary:
         if not all(isinstance(i, StreamSummary) for i in args):
             raise TypeError("All arguments to merge must be StreamSummarys")
         if not all(i.dtype == self.dtype for i in args):
-            raise TypeError("All arguments to merge must have same dtype")
+            raise ValueError("All arguments to merge must have same dtype")
         cdef StreamSummary s
         if np.PyDataType_ISOBJECT(self.dtype):
             for s in args:
-                if s is self: continue
                 summary_object_merge(<summary_object_t*>self.summary,
                                      <summary_object_t*>s.summary)
         else:
             for s in args:
-                if s is self: continue
                 summary_int64_merge(<summary_int64_t*>self.summary,
                                     <summary_int64_t*>s.summary)
 
