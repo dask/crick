@@ -153,7 +153,7 @@ cdef class StreamSummary:
     Notes
     -----
     This implements the "Space-Saving" algorithm using the "Stream-Summary"
-    datastructure described in [1]_.
+    datastructure described in [1]_. The merge algorithm is taken from [2]_.
 
     References
     ----------
@@ -161,6 +161,10 @@ cdef class StreamSummary:
        computation of frequent and top-k elements in data streams."
        International Conference on Database Theory. Springer Berlin Heidelberg,
        2005.
+
+    .. [2] Cafaro, Massimo, Marco Pulimeno, and Piergiulio Tempesta. "A
+           parallel space saving algorithm for frequent items and the Hurwitz
+           zeta distribution." Information Sciences 329 (2016): 1-19.
     """
     cdef summary_t *summary
     cdef readonly np.dtype dtype
