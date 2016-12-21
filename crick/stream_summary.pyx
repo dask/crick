@@ -163,8 +163,8 @@ cdef class StreamSummary:
        2005.
 
     .. [2] Cafaro, Massimo, Marco Pulimeno, and Piergiulio Tempesta. "A
-           parallel space saving algorithm for frequent items and the Hurwitz
-           zeta distribution." Information Sciences 329 (2016): 1-19.
+       parallel space saving algorithm for frequent items and the Hurwitz zeta
+       distribution." Information Sciences 329 (2016): 1-19.
     """
     cdef summary_t *summary
     cdef readonly np.dtype dtype
@@ -211,22 +211,22 @@ cdef class StreamSummary:
         The number of active counters."""
         return self.summary.size
 
-    def counters(self, astuples=False):
+    def counters(self):
         """counters(self)
 
         Returns a numpy array of all the counters in the summary. Note that
         this array is a *copy* of the internal data.
         """
-        return self.topk(self.size(), astuples=astuples)
+        return self.topk(self.size())
 
     def __reduce__(self):
         return (StreamSummary, (self.capacity, self.dtype), self.__getstate__())
 
     def __getstate__(self):
-        return self.counters()
+        return (self.counters(),)
 
     def __setstate__(self, state):
-        cdef np.ndarray counters = state
+        cdef np.ndarray counters = state[0]
         cdef np.intp_t size = len(counters)
         if np.PyDataType_ISOBJECT(self.dtype):
             summary_object_set_state(<summary_object_t*>self.summary,
@@ -297,7 +297,7 @@ cdef class StreamSummary:
                                          <np.PyArrayObject*>count)
 
     cpdef topk(self, int k, astuples=False):
-        """topk(self, k, astuples=True)
+        """topk(self, k, astuples=False)
 
         Estimate the top k elements.
 
