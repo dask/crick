@@ -34,6 +34,7 @@ cdef extern from "stream_summary_stubs.c":
     summary_int64_t *summary_int64_new(int capacity)
     void summary_int64_free(summary_int64_t *T)
     int summary_int64_add(summary_int64_t *T, np.int64_t item, np.int64_t count) except -1
+    int summary_int64_merge(summary_int64_t *T1, summary_int64_t *T2) except -1
     int summary_int64_set_state(summary_int64_t *T, counter_int64_t *counters, size_t size) except -1
     int summary_int64_update_ndarray(summary_int64_t *T, np.PyArrayObject *item,
                                      np.PyArrayObject *count) except -1
@@ -57,6 +58,7 @@ cdef extern from "stream_summary_stubs.c":
     summary_object_t *summary_object_new(int capacity)
     void summary_object_free(summary_object_t *T)
     int summary_object_add(summary_object_t *T, object item, np.int64_t count) except -1
+    int summary_object_merge(summary_object_t *T1, summary_object_t *T2) except -1
     int summary_object_set_state(summary_object_t *T, counter_object_t *counters, size_t size) except -1
     int summary_object_update_ndarray(summary_object_t *T, np.PyArrayObject *item,
                                       np.PyArrayObject *count) except -1
@@ -328,6 +330,32 @@ cdef class StreamSummary:
         if astuples:
             return [TopKResult(*i) for i in out]
         return out
+
+    def merge(self, *args):
+        """merge(self, *args)
+
+        Update this summary inplace with data from other summaries.
+
+        Parameters
+        ----------
+        args : StreamSummarys
+            StreamSummarys to merge into this one.
+        """
+        if not all(isinstance(i, StreamSummary) for i in args):
+            raise TypeError("All arguments to merge must be StreamSummarys")
+        if not all(i.dtype == self.dtype for i in args):
+            raise TypeError("All arguments to merge must have same dtype")
+        cdef StreamSummary s
+        if np.PyDataType_ISOBJECT(self.dtype):
+            for s in args:
+                if s is self: continue
+                summary_object_merge(<summary_object_t*>self.summary,
+                                     <summary_object_t*>s.summary)
+        else:
+            for s in args:
+                if s is self: continue
+                summary_int64_merge(<summary_int64_t*>self.summary,
+                                    <summary_int64_t*>s.summary)
 
 
 @cython.boundscheck(False)

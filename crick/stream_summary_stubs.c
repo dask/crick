@@ -145,27 +145,6 @@ static inline size_t summary_##name##_counter_new(summary_##name##_t *T,        
 }                                                                               \
                                                                                 \
                                                                                 \
-static inline size_t summary_##name##_replace_min(summary_##name##_t *T,        \
-                                                  item_t item,                  \
-                                                  npy_int64 count) {            \
-    size_t tail = T->list[T->head].prev;                                        \
-                                                                                \
-    /* Remove the min item from the hashmap */                                  \
-    item_t min_item = T->list[tail].counter.item;                               \
-    khiter_t iter = kh_get(name, T->hashmap, min_item);                         \
-    kh_del(name, T->hashmap, iter);                                             \
-    if (refcount) {                                                             \
-        Py_DECREF(min_item);                                                    \
-        Py_INCREF(item);                                                        \
-    }                                                                           \
-                                                                                \
-    T->list[tail].counter.item = item;                                          \
-    T->list[tail].counter.error = T->list[tail].counter.count;                  \
-    T->list[tail].counter.count++;                                              \
-    return tail;                                                                \
-}                                                                               \
-                                                                                \
-                                                                                \
 static inline void summary_##name##_rebalance(summary_##name##_t *T,            \
                                               size_t index) {                   \
     if (T->head == index) {                                                     \
@@ -184,6 +163,28 @@ static inline void summary_##name##_rebalance(summary_##name##_t *T,            
 }                                                                               \
                                                                                 \
                                                                                 \
+static inline int summary_##name##_swap(summary_##name##_t *T,                  \
+                                        size_t index, item_t item,              \
+                                        npy_int64 count, npy_int64 error) {     \
+    /* Remove the old item from the hashmap */                                  \
+    item_t old_item = T->list[index].counter.item;                              \
+    khiter_t iter = kh_get(name, T->hashmap, old_item);                         \
+    if (iter == kh_end(T->hashmap)) return -1;                                  \
+    if (refcount && PyErr_Occurred()) return -1;                                \
+    kh_del(name, T->hashmap, iter);                                             \
+    if (refcount) {                                                             \
+        Py_DECREF(old_item);                                                    \
+        Py_INCREF(item);                                                        \
+    }                                                                           \
+                                                                                \
+    T->list[index].counter.item = item;                                         \
+    T->list[index].counter.error = error;                                       \
+    T->list[index].counter.count = count;                                       \
+    summary_##name##_rebalance(T, index);                                       \
+    return 0;                                                                   \
+}                                                                               \
+                                                                                \
+                                                                                \
 static inline int summary_##name##_add(summary_##name##_t *T,                   \
                                        item_t item, npy_int64 count) {          \
     int absent;                                                                 \
@@ -198,8 +199,11 @@ static inline int summary_##name##_add(summary_##name##_t *T,                   
         /* New item */                                                          \
         if (T->size == T->capacity) {                                           \
             /* we're full, replace the min counter */                           \
-            index = summary_##name##_replace_min(T, item, count);               \
-            summary_##name##_rebalance(T, index);                               \
+            index = T->list[T->head].prev;                                      \
+            int err = summary_##name##_swap(T, index, item,                     \
+                                            T->list[index].counter.count + 1,   \
+                                            T->list[index].counter.count);      \
+            if (err < 0) return -1;                                             \
         } else {                                                                \
             /* Not full, allocate a new counter */                              \
             index = summary_##name##_counter_new(T, item, count, 0);            \
@@ -251,6 +255,81 @@ static int summary_##name##_set_state(summary_##name##_t *T,                    
         }                                                                       \
     }                                                                           \
     return 1;                                                                   \
+}                                                                               \
+                                                                                \
+static int summary_##name##_merge(summary_##name##_t *T1,                       \
+                                  summary_##name##_t *T2) {                     \
+    /* Nothing to do */                                                         \
+    if (T2->size == 0) return 0;                                                \
+                                                                                \
+    /* Get the minimum counts from each */                                      \
+    npy_int64 m1, m2;                                                           \
+    if (T1->size < T1->capacity)                                                \
+        m1 = 0;                                                                 \
+    else                                                                        \
+        m1 = T1->list[T1->list[T1->head].prev].counter.count;                   \
+                                                                                \
+    if (T2->size < T2->capacity)                                                \
+        m2 = 0;                                                                 \
+    else                                                                        \
+        m2 = T2->list[T2->list[T2->head].prev].counter.count;                   \
+                                                                                \
+    /* Iterate through T1, updating it inplace */                               \
+    size_t i2, i1 = T1->head;                                                   \
+    for (int i = 0; i < T1->size; i++) {                                        \
+        khiter_t iter = kh_get(name, T2->hashmap, T1->list[i1].counter.item);   \
+                                                                                \
+        if (refcount && PyErr_Occurred()) return -1;                            \
+                                                                                \
+        if (iter != kh_end(T2->hashmap)) {                                      \
+            /* item is in both T1 and T2 */                                     \
+            i2 = kh_val(T2->hashmap, iter);                                     \
+            T1->list[i1].counter.count += T2->list[i2].counter.count;           \
+            T1->list[i1].counter.error += T2->list[i2].counter.error;           \
+        }                                                                       \
+        else {                                                                  \
+            /* item is in only T1 */                                            \
+            T1->list[i1].counter.count += m2;                                   \
+            T1->list[i1].counter.error += m2;                                   \
+        }                                                                       \
+        summary_##name##_rebalance(T1, i1);                                     \
+        i1 = T1->list[i1].next;                                                 \
+    }                                                                           \
+                                                                                \
+    /* Iterate through T2, adding in any missing items */                       \
+    i2 = T2->head;                                                              \
+    for (int i = 0; i < T2->size; i++) {                                        \
+        int absent;                                                             \
+        khiter_t iter = kh_put(name, T1->hashmap,                               \
+                               T2->list[i2].counter.item, &absent);             \
+        if (refcount && PyErr_Occurred()) return -1;                            \
+                                                                                \
+        if (absent > 0) {                                                       \
+            /* Item isn't in T1, maybe add it */                                \
+            counter_##name##_t c2 = T2->list[i2].counter;                       \
+            if (T1->size == T1->capacity) {                                     \
+                i1 = T1->list[T1->head].prev;                                   \
+                                                                                \
+                /* If all counts in T1 are >= T2 + m1 then we're done here */   \
+                if (T1->list[i1].counter.count >= c2.count + m1) break;         \
+                                                                                \
+                int err = summary_##name##_swap(T1, i1, c2.item, c2.count + m1, \
+                                                c2.error + m1);                 \
+                if (err < 0) return -1;                                         \
+            }                                                                   \
+            else {                                                              \
+                i1 = summary_##name##_counter_new(T1, c2.item, c2.count + m1,   \
+                                                  c2.error + m1);               \
+            }                                                                   \
+            kh_val(T1->hashmap, iter) = i1;                                     \
+        }                                                                       \
+        else if (absent < 0) {                                                  \
+            PyErr_NoMemory();                                                   \
+            return -1;                                                          \
+        }                                                                       \
+        i2 = T2->list[i2].next;                                                 \
+    }                                                                           \
+    return 0;                                                                   \
 }
 
 
@@ -339,7 +418,7 @@ finish:                                                                         
         }                                                                       \
     }                                                                           \
     return ret;                                                                 \
-}
+}                                                                               \
 
 
 #define INIT_SUMMARY(name, item_t, refcount, DTYPE) \
