@@ -319,9 +319,9 @@ def test_histogram_errors():
     with pytest.raises(Exception):
         t.histogram(range=1)
 
-    for v in [np.nan, np.inf, -np.inf]:
+    for r in [(np.nan, 1), (np.inf, 1), (1, np.nan), (1, np.inf)]:
         with pytest.raises(ValueError):
-            t.histogram(range=(v, 1))
+            t.histogram(range=r)
 
     with pytest.raises(ValueError):
         t.histogram(range=(1, 0))

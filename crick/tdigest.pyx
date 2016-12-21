@@ -185,7 +185,7 @@ cdef class TDigest:
         else:
             left = <double?>range[0]
             right = <double?>range[1]
-            if not isfinite(left) and isfinite(right):
+            if not (isfinite(left) and isfinite(right)):
                 raise ValueError("range parameters must be finite")
             elif right < left:
                 raise ValueError("max must be larger than min for range "
@@ -202,6 +202,8 @@ cdef class TDigest:
             bin_edges = np.asarray(bins).astype('f8', copy=False)
             if bin_edges.ndim != 1:
                 raise ValueError("bins must be a 1-dimensional array")
+            elif not np.isfinite(bins).all():
+                raise ValueError("bins must be finite")
             elif (np.diff(bin_edges) < 0).any():
                 raise ValueError("bins must increase monotonically")
 
@@ -251,7 +253,7 @@ cdef class TDigest:
             self.tdigest.last = n - 1
 
     def add(self, double x, double w=1):
-        """add(self, x, w)
+        """add(self, x, w=1)
 
         Add a sample to this digest.
 
@@ -263,12 +265,12 @@ cdef class TDigest:
             The weight of the value to add. Default is 1.
         """
         # Don't check w in the common case where w is 1
-        if w != 1 and (w <= 0 or not isfinite(w)):
+        if w != 1 and (not isfinite(w) or w <= 0):
             raise ValueError("w must be > 0 and finite")
         tdigest_add(self.tdigest, x, w)
 
     def update(self, x, w=1):
-        """update(self, x, w)
+        """update(self, x, w=1)
 
         Add many samples to this digest.
 
@@ -289,7 +291,7 @@ cdef class TDigest:
         if not np.can_cast(w, 'f8', casting='safe'):
             raise TypeError("w must be numeric")
 
-        if check_w and ((w <= 0).any() or not np.isfinite(w).all()):
+        if check_w and (not np.isfinite(w).all() or (w <= 0).any()):
             raise ValueError("w must be > 0 and finite")
 
         tdigest_update_ndarray(self.tdigest, <np.PyArrayObject*>x,
