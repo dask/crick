@@ -47,7 +47,7 @@ def test_skew(x, bias):
     s = SummaryStats()
     s.update(x)
     res = s.skew(bias=bias)
-    sol = stats.skew(x, bias=bias, nan_policy='omit') if len(x) else np.nan
+    sol = stats.skew(x[~np.isnan(x)], bias=bias) if len(x) else np.nan
     np.testing.assert_allclose(res, sol, rtol=RTOL, atol=ATOL)
 
 
@@ -61,7 +61,7 @@ def test_kurt(x, bias, fisher):
 
     res = s.kurt(bias=bias, fisher=fisher)
     if len(x):
-        sol = stats.kurtosis(x, bias=bias, fisher=fisher, nan_policy='omit')
+        sol = stats.kurtosis(x[~np.isnan(x)], bias=bias, fisher=fisher)
     else:
         sol = np.nan
     np.testing.assert_allclose(res, sol, rtol=RTOL, atol=ATOL)
