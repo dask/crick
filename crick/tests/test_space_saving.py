@@ -8,7 +8,7 @@ from collections import namedtuple
 import numpy as np
 import pytest
 
-from crick import StreamSummary
+from crick import SpaceSaving
 
 
 data_f8 = np.random.RandomState(42).gamma(0.1, 0.1, size=10000).round(2) * 100
@@ -30,8 +30,8 @@ def topk(data, k):
                           (object, data_string),
                           (object, data_i8),
                           (float, data_i8)])
-def test_stream_summary(dtype, data):
-    s = StreamSummary(capacity=20, dtype=dtype)
+def test_space_saving(dtype, data):
+    s = SpaceSaving(capacity=20, dtype=dtype)
     s.update(data)
     assert s.size() == s.capacity
     top = s.topk(10)
@@ -41,8 +41,8 @@ def test_stream_summary(dtype, data):
 
 
 def test_add_matches_update():
-    s = StreamSummary(capacity=20, dtype=int)
-    s2 = StreamSummary(capacity=20, dtype=int)
+    s = SpaceSaving(capacity=20, dtype=int)
+    s2 = SpaceSaving(capacity=20, dtype=int)
     s.update(data_i8)
     for i in data_i8:
         s2.add(i)
@@ -50,21 +50,21 @@ def test_add_matches_update():
 
 
 def test_init():
-    s = StreamSummary(capacity=10, dtype='f8')
+    s = SpaceSaving(capacity=10, dtype='f8')
     assert s.dtype == np.dtype('f8')
     assert s.capacity == 10
-    assert StreamSummary(dtype='i4').dtype == np.dtype('i8')
+    assert SpaceSaving(dtype='i4').dtype == np.dtype('i8')
 
     for c in [-10, 0, np.nan]:
         with pytest.raises(ValueError):
-            StreamSummary(capacity=c)
+            SpaceSaving(capacity=c)
 
     with pytest.raises(ValueError):
-        StreamSummary(dtype='S1')
+        SpaceSaving(dtype='S1')
 
 
 def test_algorithm():
-    s = StreamSummary(capacity=5, dtype='i8')
+    s = SpaceSaving(capacity=5, dtype='i8')
     assert s.size() == 0
     assert len(s.counters()) == 0
 
@@ -107,7 +107,7 @@ def test_algorithm():
 
 
 def test_object_reference_counting():
-    s = StreamSummary(capacity=5, dtype=object)
+    s = SpaceSaving(capacity=5, dtype=object)
 
     data = ('this', 'should', 'have', 'no', 'other', 'refs')
     data2 = ('neither', 'should', 'this')
@@ -148,7 +148,7 @@ def test_object_reference_counting():
 
 
 def test_object_hash_errors():
-    s = StreamSummary(capacity=5, dtype=object)
+    s = SpaceSaving(capacity=5, dtype=object)
     data = ['lists', 'are', 'unhashable']
     orig = sys.getrefcount(data)
 
@@ -161,7 +161,7 @@ def test_object_hash_errors():
 
 
 def test_weights():
-    s = StreamSummary(capacity=5, dtype='i8')
+    s = SpaceSaving(capacity=5, dtype='i8')
     s.add(1, 10)
     c = s.counters()
     np.testing.assert_equal(c['item'], 1)
@@ -184,7 +184,7 @@ def test_weights():
 
 
 def test_add_raises():
-    s = StreamSummary(capacity=5, dtype='i8')
+    s = SpaceSaving(capacity=5, dtype='i8')
 
     for x, c in [(1, 0), (1, -10), (1, np.nan), (np.nan, 1)]:
         with pytest.raises(ValueError):
@@ -200,7 +200,7 @@ def test_add_raises():
 
 
 def test_update_raises():
-    s = StreamSummary(capacity=5, dtype='i8')
+    s = SpaceSaving(capacity=5, dtype='i8')
 
     for x, c in [(1, 0), (1, -10)]:
         for x2, c2 in [([x], [c]), ([x], c), (x, [c])]:
@@ -215,7 +215,7 @@ def test_update_raises():
 
 
 def test_topk_invariants():
-    s = StreamSummary(capacity=5, dtype='f8')
+    s = SpaceSaving(capacity=5, dtype='f8')
     s.update(data_f8)
     for k in [0, 5]:
         top = s.topk(k)
@@ -237,8 +237,8 @@ def test_topk_invariants():
 
 @pytest.mark.parametrize('dtype', [float, int, object])
 def test_serialize(dtype):
-    empty = StreamSummary(capacity=5, dtype=dtype)
-    nonempty = StreamSummary(capacity=5, dtype=dtype)
+    empty = SpaceSaving(capacity=5, dtype=dtype)
+    nonempty = SpaceSaving(capacity=5, dtype=dtype)
     # Results in nonuniform count and error, and non-sorted counters
     nonempty.update([1, 2, 3, 4, 5, 3, 3, 3, 6, 7])
 
@@ -295,30 +295,30 @@ d1 = [1, 2, 3, 4, 5, 5, 5, 6]
 d2 = [1, 2, 3, 5, 5, 6, 6, 7]
 
 # s1 and s2 are designed to hit each case of the merge algorithm
-s1 = StreamSummary(capacity=5, dtype='i8')
+s1 = SpaceSaving(capacity=5, dtype='i8')
 s1.update(d1)
 
-s2 = StreamSummary(capacity=5, dtype='i8')
+s2 = SpaceSaving(capacity=5, dtype='i8')
 s2.update(d2)
 
-empty = StreamSummary(capacity=5, dtype='i8')
+empty = SpaceSaving(capacity=5, dtype='i8')
 
-two = StreamSummary(capacity=7, dtype='i8')
+two = SpaceSaving(capacity=7, dtype='i8')
 two.update([1, 2])
 
-half = StreamSummary(capacity=10, dtype='i8')
+half = SpaceSaving(capacity=10, dtype='i8')
 half.update(d1)
 
-big_1 = StreamSummary(capacity=20, dtype='i8')
+big_1 = SpaceSaving(capacity=20, dtype='i8')
 big_1.update(data_i8)
 
 data_i8b = np.random.RandomState(7).gamma(0.1, 0.1, size=10000).round(2) * 100
-big_2 = StreamSummary(capacity=20, dtype='i8')
+big_2 = SpaceSaving(capacity=20, dtype='i8')
 big_2.update(data_i8b.astype('i8'))
 
-object_1 = StreamSummary(capacity=20, dtype=object)
+object_1 = SpaceSaving(capacity=20, dtype=object)
 object_1.update(data_i8)
-object_2 = StreamSummary(capacity=20, dtype=object)
+object_2 = SpaceSaving(capacity=20, dtype=object)
 object_2.update(data_i8b)
 
 summaries = [(s1, s2),
@@ -337,7 +337,7 @@ summaries = [(s1, s2),
 
 @pytest.mark.parametrize('s1, s2', summaries)
 def test_merge_algorithm(s1, s2):
-    s3 = StreamSummary(capacity=s1.capacity, dtype=s1.dtype)
+    s3 = SpaceSaving(capacity=s1.capacity, dtype=s1.dtype)
     s3.merge(s1, s2)
     s4 = copy(s1)
     s4.merge(s2)
@@ -357,8 +357,8 @@ def test_merge_algorithm(s1, s2):
 
 
 def test_merge_errors():
-    s = StreamSummary(capacity=10, dtype=object)
-    s1 = StreamSummary(capacity=10, dtype=object)
+    s = SpaceSaving(capacity=10, dtype=object)
+    s1 = SpaceSaving(capacity=10, dtype=object)
     s1.update(data_object)
 
     with pytest.raises(TypeError):
