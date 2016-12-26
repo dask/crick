@@ -37,7 +37,7 @@ def generate_code(templates):
             f.write(output)
 
 
-templates = ['crick/stream_summary_stubs.c.in']
+templates = ['crick/space_saving_stubs.c.in']
 
 generate_code(templates)
 
@@ -45,8 +45,8 @@ generate_code(templates)
 extensions = [Extension("crick.tdigest",
                         ['crick/tdigest.pyx'],
                         **kwargs),
-              Extension("crick.stream_summary",
-                        ['crick/stream_summary.pyx'],
+              Extension("crick.space_saving",
+                        ['crick/space_saving.pyx'],
                         include_dirs=['crick/klib'],
                         **kwargs),
               Extension("crick.stats",

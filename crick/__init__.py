@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from .tdigest import TDigest
-from .stream_summary import StreamSummary
+from .space_saving import SpaceSaving
 from .stats import SummaryStats
 
 from ._version import get_versions
