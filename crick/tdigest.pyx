@@ -61,6 +61,19 @@ cdef class TDigest:
         The compression factor to use. Larger numbers provide more accurate
         estimates, but use more memory. For most uses, the default should
         suffice.
+
+    Notes
+    -----
+    This implements the "MergingDigest" variant of the T-Digest algorithm
+    descibed in [1]_. The reference java implementation can be found at [2]_.
+
+    References
+    ----------
+    .. [1] Dunning, Ted, and Otmar Ertl. "Computing Extremely Accurate
+       Quantiles Using T-Digests." https://github.com/tdunning/t-digest/blob/
+       master/docs/t-digest-paper/histo.pdf
+
+    .. [2] https://github.com/tdunning/t-digest
     """
     cdef tdigest_t *tdigest
 
