@@ -1,0 +1,35 @@
+# Loosely based on https://github.com/dask/dask/blob/master/appveyor.yml
+
+environment:
+    global:
+        # SDK v7.0 MSVC Express 2008's SetEnv.cmd script will fail if the
+        # /E:ON and /V:ON options are not enabled in the batch script intepreter
+        # See: http://stackoverflow.com/a/13751649/163740
+        CMD_IN_ENV: "cmd /E:ON /V:ON /C .\\tools\\run_with_env.cmd"
+
+    matrix:
+        - PYTHON_VERSION: "3.5"
+          PYTHON_ARCH: "64"
+          NUMPY: "1.11"
+
+        - PYTHON_VERSION: "2.7"
+          PYTHON_ARCH: "64"
+          NUMPY: "1.10.4"
+
+init:
+    # Use AppVeyor's provided Miniconda: https://www.appveyor.com/docs/installed-software#python
+    - if "%PYTHON_ARCH%" == "64" set MINICONDA=C:\Miniconda35-x64
+    - if "%PYTHON_ARCH%" == "32" set MINICONDA=C:\Miniconda35
+    - set PATH=%MINICONDA%;%MINICONDA%/Scripts;%MINICONDA%/Library/bin;%PATH%
+
+install:
+    # Update to a known good conda
+    # (to workaround http://help.appveyor.com/discussions/problems/4910)
+    - conda install -q -y conda=4.2.9
+    - conda config --set always_yes true --set changeps1 false
+    - conda create -n testenv python=%PYTHON_VERSION% numpy=%NUMPY% pytest cython scipy
+    - activate testenv
+    - "%CMD_IN_ENV% pip install --no-deps --global-option build --global-option --debug -e ."
+
+test_script:
+    - py.test crick
