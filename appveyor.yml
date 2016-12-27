@@ -16,6 +16,11 @@ environment:
           PYTHON_ARCH: "64"
           NUMPY: "1.10.4"
 
+platform: 
+    - x64
+
+build: false
+
 init:
     # Use AppVeyor's provided Miniconda: https://www.appveyor.com/docs/installed-software#python
     - if "%PYTHON_ARCH%" == "64" set MINICONDA=C:\Miniconda35-x64
@@ -29,7 +34,7 @@ install:
     - conda config --set always_yes true --set changeps1 false
     - conda create -n testenv python=%PYTHON_VERSION% numpy=%NUMPY% pytest cython scipy
     - activate testenv
-    - "%CMD_IN_ENV% pip install --no-deps --global-option build --global-option --debug -e ."
+    - "%CMD_IN_ENV% pip install --no-deps -e ."
 
 test_script:
     - py.test crick
