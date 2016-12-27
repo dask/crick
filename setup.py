@@ -12,7 +12,6 @@ import versioneer
 compile_args = np_misc.get_info('npymath')
 compile_args['include_dirs'].append('crick/klib')
 
-# TODO: debug compilation doesn't work on windows
 if '--debug' in sys.argv:
     sys.argv.remove('--debug')
     compile_args['undef_macros'] = ["NDEBUG"]

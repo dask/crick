@@ -16,7 +16,7 @@ environment:
           PYTHON_ARCH: "64"
           NUMPY: "1.10.4"
 
-platform: 
+platform:
     - x64
 
 build: false
