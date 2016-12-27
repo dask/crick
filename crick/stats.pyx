@@ -1,4 +1,4 @@
-from libc.math cimport NAN
+from numpy.math cimport NAN
 cimport numpy as np
 import numpy as np
 
@@ -18,8 +18,8 @@ cdef extern from "stats_stubs.c":
     void stats_free(stats_t *T)
     void stats_add(stats_t *T, np.float64_t x, np.int64_t count)
     void stats_merge(stats_t *T1, stats_t *T2)
-    int stats_update_ndarray(stats_t *T, np.PyArrayObject *x,
-                             np.PyArrayObject *w) except -1
+    np.intp_t stats_update_ndarray(stats_t *T, np.PyArrayObject *x,
+                                   np.PyArrayObject *w) except -1
     np.float64_t stats_mean(stats_t *T)
     np.float64_t stats_var(stats_t *T, np.int64_t ddof)
     np.float64_t stats_std(stats_t *T, np.int64_t ddof)
@@ -111,7 +111,7 @@ cdef class SummaryStats:
         """
         x = np.asarray(x)
         check_count = not (np.isscalar(count) and count == 1)
-        count = np.asarray(count)
+        count = np.asarray(count, dtype='i8')
         if check_count and (count <= 0).any():
             raise ValueError("count must be > 0")
 

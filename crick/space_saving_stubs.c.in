@@ -2,21 +2,22 @@
 #include <Python.h>
 #include <numpy/arrayobject.h>
 
+#include "common.h"
 #include "khash.h"
 
 
-// The value indicating missingess
+/* The value indicating missingess */
 #define NIL -1
 
 
 /* Define the hashtable structs
  * These map the items to counters for each dtype */
 
-// int64 dtypes
+/* int64 dtypes */
 KHASH_MAP_INIT_INT64(int64, npy_intp)
 
-// object dtype
-static inline int pyobject_cmp(PyObject* a, PyObject* b) {
+/* object dtype */
+CRICK_INLINE int pyobject_cmp(PyObject* a, PyObject* b) {
 	int result = PyObject_RichCompareBool(a, b, Py_EQ);
 	if (result < 0) {
 		PyErr_Clear();
@@ -71,7 +72,7 @@ typedef struct {
 } spsv_{{name}}_t;
 
 
-static inline spsv_{{name}}_t *spsv_{{name}}_new(int capacity) {
+CRICK_INLINE spsv_{{name}}_t *spsv_{{name}}_new(int capacity) {
     spsv_{{name}}_t *T = (spsv_{{name}}_t *)malloc(sizeof(*T));
     if (T == NULL)
         goto fail;
@@ -94,7 +95,7 @@ fail:
 }
 
 
-static inline void spsv_{{name}}_free(spsv_{{name}}_t *T) {
+CRICK_INLINE void spsv_{{name}}_free(spsv_{{name}}_t *T) {
     {{if refcount}}
     khiter_t iter;
     for (iter = kh_begin(T->hashmap); iter != kh_end(T->hashmap); ++iter) {
@@ -108,16 +109,16 @@ static inline void spsv_{{name}}_free(spsv_{{name}}_t *T) {
 }
 
 
-static inline int counter_{{name}}_ge(counter_{{name}}_t c1,
-                                      counter_{{name}}_t c2,
-                                      npy_int64 offset) {
+CRICK_INLINE int counter_{{name}}_ge(counter_{{name}}_t c1,
+                                     counter_{{name}}_t c2,
+                                     npy_int64 offset) {
     npy_int64 count = c2.count + offset;
     npy_int64 error = c2.error + offset;
     return (c1.count > count || (c1.count == count && c1.error <= error));
 }
 
 
-static inline void spsv_{{name}}_counter_insert(spsv_{{name}}_t *T,
+CRICK_INLINE void spsv_{{name}}_counter_insert(spsv_{{name}}_t *T,
                                                 npy_intp c, npy_intp prev) {
     npy_intp tail = T->list[T->head].prev;
     while(1) {
@@ -137,14 +138,14 @@ static inline void spsv_{{name}}_counter_insert(spsv_{{name}}_t *T,
 }
 
 
-static inline npy_intp spsv_{{name}}_counter_new(spsv_{{name}}_t *T,
-                                                 {{item_t}} item, npy_int64 count,
-                                                 npy_int64 error) {
+CRICK_INLINE npy_intp spsv_{{name}}_counter_new(spsv_{{name}}_t *T,
+                                                {{item_t}} item, npy_int64 count,
+                                                npy_int64 error) {
+    npy_intp c = T->size;
+    T->size++;
     {{if refcount}}
     Py_INCREF(item);
     {{endif}}
-    npy_intp c = T->size;
-    T->size++;
 
     T->list[c].counter.item = item;
     T->list[c].counter.count = count;
@@ -163,13 +164,13 @@ static inline npy_intp spsv_{{name}}_counter_new(spsv_{{name}}_t *T,
 }
 
 
-static inline void spsv_{{name}}_rebalance(spsv_{{name}}_t *T,
-                                           npy_intp index) {
+CRICK_INLINE void spsv_{{name}}_rebalance(spsv_{{name}}_t *T, npy_intp index) {
+    npy_intp prev;
     if (T->head == index) {
         /* Counts can only increase */
         return;
     }
-    npy_intp prev = T->list[index].prev;
+    prev = T->list[index].prev;
 
     if (counter_{{name}}_ge(T->list[prev].counter,
                             T->list[index].counter, 0))
@@ -182,9 +183,9 @@ static inline void spsv_{{name}}_rebalance(spsv_{{name}}_t *T,
 }
 
 
-static inline int spsv_{{name}}_swap(spsv_{{name}}_t *T,
-                                     npy_intp index, {{item_t}} item,
-                                     npy_int64 count, npy_int64 error) {
+CRICK_INLINE int spsv_{{name}}_swap(spsv_{{name}}_t *T, npy_intp index,
+                                    {{item_t}} item, npy_int64 count,
+                                    npy_int64 error) {
     /* Remove the old item from the hashmap */
     {{item_t}} old_item = T->list[index].counter.item;
     khiter_t iter = kh_get({{name}}, T->hashmap, old_item);
@@ -209,8 +210,8 @@ static inline int spsv_{{name}}_swap(spsv_{{name}}_t *T,
 }
 
 
-static inline int spsv_{{name}}_add(spsv_{{name}}_t *T,
-                                    {{item_t}} item, npy_int64 count) {
+CRICK_INLINE int spsv_{{name}}_add(spsv_{{name}}_t *T, {{item_t}} item,
+                                   npy_int64 count) {
     int absent;
     npy_intp index;
 
@@ -225,10 +226,10 @@ static inline int spsv_{{name}}_add(spsv_{{name}}_t *T,
         if (T->size == T->capacity) {
             /* we're full, replace the min counter */
             index = T->list[T->head].prev;
-            int err = spsv_{{name}}_swap(T, index, item,
-                                         T->list[index].counter.count + 1,
-                                         T->list[index].counter.count);
-            if (err < 0) return -1;
+            if (spsv_{{name}}_swap(T, index, item,
+                                   T->list[index].counter.count + 1,
+                                   T->list[index].counter.count))
+                return -1;
         } else {
             /* Not full, allocate a new counter */
             index = spsv_{{name}}_counter_new(T, item, count, 0);
@@ -249,17 +250,17 @@ static inline int spsv_{{name}}_add(spsv_{{name}}_t *T,
 }
 
 
-static int spsv_{{name}}_set_state(spsv_{{name}}_t *T,
-                                   counter_{{name}}_t *counters,
-                                   npy_intp size) {
-    int absent;
+CRICK_INLINE int spsv_{{name}}_set_state(spsv_{{name}}_t *T,
+                                         counter_{{name}}_t *counters,
+                                         npy_intp size) {
+    int i, absent;
     npy_intp index;
     if (size > T->capacity) {
         PyErr_SetString(PyExc_ValueError,
                         "deserialization failed, size > capacity");
         return -1;
     }
-    for (int i=0; i < size; i++) {
+    for (i=0; i < size; i++) {
         counter_{{name}}_t c = counters[i];
         /* Get the pointer to the bucket */
         khiter_t iter = kh_put({{name}}, T->hashmap, c.item, &absent);
@@ -285,12 +286,14 @@ static int spsv_{{name}}_set_state(spsv_{{name}}_t *T,
 }
 
 
-static int spsv_{{name}}_merge(spsv_{{name}}_t *T1, spsv_{{name}}_t *T2) {
+CRICK_INLINE int spsv_{{name}}_merge(spsv_{{name}}_t *T1, spsv_{{name}}_t *T2) {
+    npy_int64 m1, m2;
+    npy_intp i1, i2;
+    int i;
     /* Nothing to do */
     if (T2->size == 0) return 0;
 
     /* Get the minimum counts from each */
-    npy_int64 m1, m2;
     if (T1->size < T1->capacity)
         m1 = 0;
     else
@@ -302,7 +305,6 @@ static int spsv_{{name}}_merge(spsv_{{name}}_t *T1, spsv_{{name}}_t *T2) {
         m2 = T2->list[T2->list[T2->head].prev].counter.count;
 
     /* Iterate through T1, updating it inplace */
-    npy_intp i1, i2;
     for (i1 = 0; i1 < T1->size; i1++) {
         khiter_t iter = kh_get({{name}}, T2->hashmap, T1->list[i1].counter.item);
 
@@ -326,7 +328,7 @@ static int spsv_{{name}}_merge(spsv_{{name}}_t *T1, spsv_{{name}}_t *T2) {
 
     /* Iterate through T2, adding in any missing items */
     i2 = T2->head;
-    for (int i = 0; i < T2->size; i++) {
+    for (i = 0; i < T2->size; i++) {
         int absent;
         counter_{{name}}_t c2 = T2->list[i2].counter;
         khiter_t iter = kh_put({{name}}, T1->hashmap, c2.item, &absent);
@@ -342,9 +344,9 @@ static int spsv_{{name}}_merge(spsv_{{name}}_t *T1, spsv_{{name}}_t *T2) {
                 /* If all counts in T1 are >= T2 + m1 then we're done here */
                 if (counter_{{name}}_ge(T1->list[i1].counter, c2, m1)) break;
 
-                int err = spsv_{{name}}_swap(T1, i1, c2.item, c2.count + m1,
-                                             c2.error + m1);
-                if (err < 0) return -1;
+                if (spsv_{{name}}_swap(T1, i1, c2.item, c2.count + m1,
+                                       c2.error + m1) < 0)
+                    return -1;
             }
             else {
                 i1 = spsv_{{name}}_counter_new(T1, c2.item, c2.count + m1,
@@ -362,8 +364,9 @@ static int spsv_{{name}}_merge(spsv_{{name}}_t *T1, spsv_{{name}}_t *T2) {
 }
 
 
-static int spsv_{{name}}_update_ndarray(spsv_{{name}}_t *T, PyArrayObject *x,
-                                        PyArrayObject *w) {
+CRICK_INLINE int spsv_{{name}}_update_ndarray(spsv_{{name}}_t *T,
+                                              PyArrayObject *x,
+                                              PyArrayObject *w) {
     NpyIter *iter = NULL;
     NpyIter_IterNextFunc *iternext;
     PyArrayObject *op[2];
@@ -375,6 +378,7 @@ static int spsv_{{name}}_update_ndarray(spsv_{{name}}_t *T, PyArrayObject *x,
     char **dataptr;
 
     npy_intp ret = -1;
+    NPY_BEGIN_THREADS_DEF;
 
     /* Handle zero-sized arrays specially */
     if (PyArray_SIZE(x) == 0 || PyArray_SIZE(w) == 0) {
@@ -412,7 +416,6 @@ static int spsv_{{name}}_update_ndarray(spsv_{{name}}_t *T, PyArrayObject *x,
     strideptr = NpyIter_GetInnerStrideArray(iter);
     innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
 
-    NPY_BEGIN_THREADS_DEF;
     if (!NpyIter_IterationNeedsAPI(iter))
         NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));
 
@@ -456,6 +459,6 @@ finish:
 /* float64 definitions are just a thin wrapper around int64, viewing the bytes
  * as int64. Define a small helper to view float64 as int64: */
 
-static inline npy_int64 asint64(npy_float64 key) {
+CRICK_INLINE npy_int64 asint64(npy_float64 key) {
   return *(npy_int64 *)(&key);
 }

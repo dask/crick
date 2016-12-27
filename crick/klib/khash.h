@@ -144,12 +144,16 @@ typedef unsigned long long khint64_t;
 #endif
 
 #ifndef kh_inline
-#ifdef _MSC_VER
-#define kh_inline __inline
-#else
-#define kh_inline inline
+  #if defined(__GNUC__)
+    #define kh_inline __inline__
+  #elif defined(_MSC_VER)
+    #define kh_inline __inline
+  #elif defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+    #define kh_inline inline
+  #else
+    #define kh_inline
+  #endif
 #endif
-#endif /* kh_inline */
 
 #ifndef klib_unused
 #if (defined __clang__ && __clang_major__ >= 3) || (defined __GNUC__ && __GNUC__ >= 3)

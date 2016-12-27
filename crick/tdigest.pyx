@@ -1,5 +1,5 @@
 from libc.string cimport memcpy
-from libc.math cimport NAN, isfinite
+from numpy.math cimport NAN, isfinite
 
 from copy import copy
 
@@ -97,7 +97,7 @@ cdef class TDigest:
         """The compression factor for this digest"""
         return self.tdigest.compression
 
-    cpdef double min(self):
+    def min(self):
         """min(self)
 
         The minimum value in the digest."""
@@ -106,7 +106,7 @@ cdef class TDigest:
             return self.tdigest.min
         return NAN
 
-    cpdef double max(self):
+    def max(self):
         """max(self)
 
         The maximum value in the digest."""
@@ -115,7 +115,7 @@ cdef class TDigest:
             return self.tdigest.max
         return NAN
 
-    cpdef double size(self):
+    def size(self):
         """size(self)
 
         The sum of the weights on all centroids."""

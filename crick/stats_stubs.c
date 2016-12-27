@@ -1,9 +1,11 @@
 #include <stdlib.h>
-#include <math.h>
 #include <float.h>
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
+#include <numpy/npy_math.h>
+
+#include "common.h"
 
 
 typedef struct {
@@ -17,7 +19,7 @@ typedef struct {
 } stats_t;
 
 
-static inline stats_t *stats_new() {
+CRICK_INLINE stats_t *stats_new() {
     stats_t *T = (stats_t *)malloc(sizeof(*T));
     if (T == NULL) return NULL;
 
@@ -33,12 +35,12 @@ static inline stats_t *stats_new() {
 }
 
 
-static inline void stats_free(stats_t *T) {
+CRICK_INLINE void stats_free(stats_t *T) {
     free(T);
 }
 
 
-static inline void stats_do_update(stats_t *T, npy_int64 n2, npy_float64 sum2,
+CRICK_INLINE void stats_do_update(stats_t *T, npy_int64 n2, npy_float64 sum2,
                                    npy_float64 min_2, npy_float64 max_2,
                                    npy_float64 m4_2, npy_float64 m3_2,
                                    npy_float64 m2_2) {
@@ -52,8 +54,10 @@ static inline void stats_do_update(stats_t *T, npy_int64 n2, npy_float64 sum2,
     npy_float64 delta_div_n = delta / n;
     npy_float64 delta_div_n_2 = (delta_div_n * delta_div_n);
     npy_float64 delta_div_n_3 = delta_div_n_2 * delta_div_n;
-    T->min = fmin(T->min, min_2);
-    T->max = fmax(T->max, max_2);
+    if (min_2 < T->min)
+        T->min = min_2;
+    if (max_2 > T->max)
+        T->max = max_2;
     T->m4 += (m4_2 +
               n1n2 * (n1_2 - n1n2 + n2_2) * delta * delta_div_n_3 +
               6 * (n1_2 * m2_2 + n2_2 * T->m2) * delta_div_n_2 +
@@ -67,59 +71,61 @@ static inline void stats_do_update(stats_t *T, npy_int64 n2, npy_float64 sum2,
 }
 
 
-static inline void stats_merge(stats_t *T1, stats_t *T2) {
+CRICK_INLINE void stats_merge(stats_t *T1, stats_t *T2) {
     if (T2->count == 0) return;
     stats_do_update(T1, T2->count, T2->sum, T2->min, T2->max,
                     T2->m4, T2->m3, T2->m2);
 }
 
-static inline void stats_add(stats_t *T, npy_float64 x, npy_int64 count) {
-    if (isnan(x)) return;
+CRICK_INLINE void stats_add(stats_t *T, npy_float64 x, npy_int64 count) {
+    if (npy_isnan(x)) return;
     stats_do_update(T, count, x, x, x, 0, 0, 0);
 }
 
 
-static inline double stats_mean(stats_t *T) {
-    return T->count ? T->sum / T->count : NAN;
+CRICK_INLINE double stats_mean(stats_t *T) {
+    return T->count ? T->sum / T->count : NPY_NAN;
 }
 
 
-static inline double stats_var(stats_t *T, long ddof) {
-    return T->count ? T->m2 / (T->count - ddof) : NAN;
+CRICK_INLINE double stats_var(stats_t *T, long ddof) {
+    return T->count ? T->m2 / (T->count - ddof) : NPY_NAN;
 }
 
 
-static inline double stats_std(stats_t *T, long ddof) {
-    return sqrt(stats_var(T, ddof));
+CRICK_INLINE double stats_std(stats_t *T, long ddof) {
+    return npy_sqrt(stats_var(T, ddof));
 }
 
 
-static inline double stats_skew(stats_t *T, int bias) {
-    if (!T->count) return NAN;
-    double m2 = T->m2 / T->count;
-    double m3 = T->m3 / T->count;
-    double n = T->count;
-    double skew = m2 ? m3 / (sqrt(m2) * m2) : 0;
+CRICK_INLINE double stats_skew(stats_t *T, int bias) {
+    double n, m2, m3, skew;
+    if (!T->count) return NPY_NAN;
+    n = T->count;
+    m2 = T->m2 / T->count;
+    m3 = T->m3 / T->count;
+    skew = m2 ? m3 / (npy_sqrt(m2) * m2) : 0;
     if (!bias && n > 2 && m2 > 0)
-        return sqrt((n - 1) * n) / (n - 2) * skew;
+        return npy_sqrt((n - 1) * n) / (n - 2) * skew;
     return skew;
 }
 
 
-static inline double stats_kurt(stats_t *T, int fisher, int bias) {
-    if (!T->count) return NAN;
-    double m2 = T->m2 / T->count;
-    double m4 = T->m4 / T->count;
-    double n = T->count;
-    double kurt = m2 ? kurt = m4 / (m2 * m2) : 0;
+CRICK_INLINE double stats_kurt(stats_t *T, int fisher, int bias) {
+    double n, m2, m4, kurt;
+    if (!T->count) return NPY_NAN;
+    n = T->count;
+    m2 = T->m2 / T->count;
+    m4 = T->m4 / T->count;
+    kurt = m2 ? kurt = m4 / (m2 * m2) : 0;
     if (!bias && n > 3 && m2 > 0)
         kurt = ((n*n - 1)*kurt - 9*n + 15)/((n - 2)*(n - 3));
     return fisher ? kurt - 3 : kurt;
 }
 
 
-static int stats_update_ndarray(stats_t *T, PyArrayObject *x,
-                                PyArrayObject *w) {
+CRICK_INLINE npy_intp stats_update_ndarray(stats_t *T, PyArrayObject *x,
+                                           PyArrayObject *w) {
     NpyIter *iter = NULL;
     NpyIter_IterNextFunc *iternext;
     PyArrayObject *op[2];
@@ -131,6 +137,7 @@ static int stats_update_ndarray(stats_t *T, PyArrayObject *x,
     char **dataptr;
 
     npy_intp ret = -1;
+    NPY_BEGIN_THREADS_DEF;
 
     /* Handle zero-sized arrays specially */
     if (PyArray_SIZE(x) == 0 || PyArray_SIZE(w) == 0) {
@@ -168,7 +175,6 @@ static int stats_update_ndarray(stats_t *T, PyArrayObject *x,
     strideptr = NpyIter_GetInnerStrideArray(iter);
     innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
 
-    NPY_BEGIN_THREADS_DEF;
     NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));
 
     do {

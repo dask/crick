@@ -117,7 +117,7 @@ def test_add_update_errors():
         with pytest.raises(ValueError):
             s.update(1, c)
 
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         s.update(x, np.nan)
 
     with pytest.raises(ValueError):

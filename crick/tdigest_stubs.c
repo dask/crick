@@ -4,11 +4,13 @@
 
 #include <stdlib.h>
 #include <float.h>
-#include <math.h>
 #include <assert.h>
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
+#include <numpy/npy_math.h>
+
+#include "common.h"
 
 
 typedef struct centroid {
@@ -18,48 +20,50 @@ typedef struct centroid {
 
 
 typedef struct tdigest {
-    // tuning parameter
+    /* tuning parameter */
     double compression;
 
-    // min/max values seen
+    /* min/max values seen */
     double min;
     double max;
 
-    // long-term storage of centroids
+    /* long-term storage of centroids */
     int size;
     int last;
     double total_weight;
     centroid_t *centroids;
 
-    // merging buffer
+    /* merging buffer */
     centroid_t *merge_centroids;
 
-    // short-term storage of centroids
+    /* short-term storage of centroids */
     int buffer_size;
     int buffer_last;
     double buffer_total_weight;
     centroid_t *buffer_centroids;
 
-    // sorting buffer
+    /* sorting buffer */
     centroid_t *buffer_sort;
 } tdigest_t;
 
 
-static tdigest_t *tdigest_new(double compression) {
+CRICK_INLINE tdigest_t *tdigest_new(double compression) {
+    int size, buffer_size;
+
     tdigest_t *T = (tdigest_t *)malloc(sizeof(*T));
     if (T == NULL)
         return NULL;
 
-    // Clip compression to bounds
+    /* Clip compression to bounds */
     if (compression < 20)
         compression = 20;
     else if (compression > 1000)
         compression = 1000;
     T->compression = compression;
 
-    // Select a good size and buffer_size
-    int size = 2 * ceil(compression);
-    int buffer_size = (7.5 + 0.37*compression - 2e-4*compression*compression);
+    /* Select a good size and buffer_size */
+    size = 2 * npy_ceil(compression);
+    buffer_size = (7.5 + 0.37*compression - 2e-4*compression*compression);
 
     T->min = DBL_MAX;
     T->max = -DBL_MAX;
@@ -95,7 +99,7 @@ fail:
 }
 
 
-static void tdigest_free(tdigest_t *T) {
+CRICK_INLINE void tdigest_free(tdigest_t *T) {
     free(T->centroids);
     free(T->merge_centroids);
     free(T->buffer_centroids);
@@ -104,12 +108,13 @@ static void tdigest_free(tdigest_t *T) {
 }
 
 
-static inline int centroid_compare(centroid_t a, centroid_t b) {
+CRICK_INLINE int centroid_compare(centroid_t a, centroid_t b) {
     return a.mean < b.mean;
 }
 
 
-static void centroid_sort(size_t n, centroid_t array[], centroid_t buffer[])
+CRICK_INLINE void centroid_sort(size_t n, centroid_t array[],
+                                centroid_t buffer[])
 {
     centroid_t *a2[2], *a, *b;
     int curr, shift;
@@ -170,21 +175,22 @@ static void centroid_sort(size_t n, centroid_t array[], centroid_t buffer[])
 }
 
 
-static inline double integrate(double c, double q) {
-    // TODO: Rarely (but sometimes) 1 < q < epsilon, due to some roundoff
-    // issues. There's probably a way to rearrange computations so this doesn't
-    // ever happen. For now, we threshold here.
-    q = fmin(q, 1);
+CRICK_INLINE double integrate(double c, double q) {
+    /* TODO: Rarely (but sometimes) 1 < q < epsilon, due to some roundoff
+     * issues. There's probably a way to rearrange computations so this doesn't
+     * ever happen. For now, we threshold here. */
+    double out;
+    q = (q > 1) ? 1 : q;
 
-    double out = (c * (asin(2 * q - 1) + M_PI_2) / M_PI);
+    out = (c * (npy_asin(2 * q - 1) + NPY_PI_2) / NPY_PI);
     assert(out <= c);
     assert(0 <= out);
     return out;
 }
 
 
-static double centroid_merge(tdigest_t *T, double weight_so_far, double k1,
-                             double u, double w) {
+CRICK_INLINE double centroid_merge(tdigest_t *T, double weight_so_far,
+                                   double k1, double u, double w) {
     double k2 = integrate(T->compression, (weight_so_far + w) / T->total_weight);
     int n = T->last;
 
@@ -209,24 +215,26 @@ static double centroid_merge(tdigest_t *T, double weight_so_far, double k1,
 }
 
 
-static void tdigest_flush(tdigest_t *T) {
+CRICK_INLINE void tdigest_flush(tdigest_t *T) {
+    int n, i = 0, j = 0;
+    double k1 = 0, weight_so_far = 0;
+    centroid_t c, *swap;
+
     if (T->buffer_last == 0)
         return;
 
     centroid_sort(T->buffer_last, T->buffer_centroids, T->buffer_sort);
 
-    T->min = fmin(T->min, T->buffer_centroids[0].mean);
-    T->max = fmax(T->max, T->buffer_centroids[T->buffer_last - 1].mean);
+    if (T->min > T->buffer_centroids[0].mean)
+        T->min = T->buffer_centroids[0].mean;
+    if (T->max < T->buffer_centroids[T->buffer_last - 1].mean)
+        T->max = T->buffer_centroids[T->buffer_last - 1].mean;
 
-    int n = (T->total_weight > 0) ? T->last + 1 : 0;
+    n = (T->total_weight > 0) ? T->last + 1 : 0;
 
     T->last = 0;
     T->total_weight += T->buffer_total_weight;
     T->buffer_total_weight = 0;
-
-    int i = 0, j = 0;
-    double k1 = 0, weight_so_far = 0;
-    centroid_t c;
 
     while (i < T->buffer_last && j < n) {
         if (centroid_compare(T->buffer_centroids[i], T->centroids[j])) {
@@ -258,27 +266,29 @@ static void tdigest_flush(tdigest_t *T) {
 
     T->buffer_last = 0;
 
-    centroid_t *swap = T->centroids;
+    swap = T->centroids;
     T->centroids = T->merge_centroids;
     T->merge_centroids = swap;
 }
 
 
-static inline void tdigest_add(tdigest_t *T, double x, double w) {
-    // w must be > 0 and finite, for speed we assume the caller has checked this
-    assert(w > 0);
-    assert(isfinite(w));
+CRICK_INLINE void tdigest_add(tdigest_t *T, double x, double w) {
+    int n;
 
-    // Ignore x = NAN, INF, and -INF
-    // Ignore w <= eps
-    if (!isfinite(x) || w <= DBL_EPSILON)
+    /* w must be > 0 and finite, for speed we assume the caller has checked this */
+    assert(w > 0);
+    assert(npy_isfinite(w));
+
+    /* Ignore x = NAN, INF, and -INF
+     * Ignore w <= eps */
+    if (!npy_isfinite(x) || w <= DBL_EPSILON)
         return;
 
     if (T->buffer_last >= T->buffer_size) {
         tdigest_flush(T);
     }
 
-    int n = T->buffer_last++;
+    n = T->buffer_last++;
     assert(n < T->buffer_size);
 
     T->buffer_centroids[n].mean = x;
@@ -287,14 +297,17 @@ static inline void tdigest_add(tdigest_t *T, double x, double w) {
 }
 
 
-static void tdigest_query_prep(tdigest_t *T) {
-    // Prep for computing quantiles or cdf
+CRICK_INLINE void tdigest_query_prep(tdigest_t *T) {
+    int i;
+    centroid_t a, b;
+
+    /* Prep for computing quantiles or cdf */
     tdigest_flush(T);
 
-    centroid_t a, b = T->centroids[0];
+    b = T->centroids[0];
     T->merge_centroids[0].mean = b.weight;
 
-    for (int i = 1; i < T->last + 1; i++) {
+    for (i = 1; i < T->last + 1; i++) {
         a = b;
         b = T->centroids[i];
 
@@ -306,7 +319,7 @@ static void tdigest_query_prep(tdigest_t *T) {
 }
 
 
-static inline int bisect(centroid_t *arr, double index, int lo, int hi) {
+CRICK_INLINE int bisect(centroid_t *arr, double index, int lo, int hi) {
     while (lo < hi) {
         int mid = (lo + hi) / 2;
         if (arr[mid].mean < index)
@@ -318,14 +331,16 @@ static inline int bisect(centroid_t *arr, double index, int lo, int hi) {
 }
 
 
-static inline double interpolate(double x, double x0, double x1) {
+CRICK_INLINE double interpolate(double x, double x0, double x1) {
     return (x - x0) / (x1 - x0);
 }
 
 
-static double tdigest_cdf(tdigest_t *T, double x) {
+CRICK_INLINE double tdigest_cdf(tdigest_t *T, double x) {
+    int i;
+    double l, r, weight;
     if (T->total_weight == 0)
-        return NAN;
+        return NPY_NAN;
     if (x < T->min)
         return 0;
     if (x > T->max)
@@ -336,26 +351,27 @@ static double tdigest_cdf(tdigest_t *T, double x) {
             return 0.5;
         return interpolate(x, T->min, T->max);
     }
-    // Equality checks only apply if > 1 centroid
+    /* Equality checks only apply if > 1 centroid */
     if (x == T->max)
         return 1;
     if (x == T->min)
         return 0;
 
-    int i = bisect(T->centroids, x, 0, T->last + 1);
-    double l = (i > 0) ? T->merge_centroids[i - 1].weight : T->min;
-    double r = (i < T->last) ? T->merge_centroids[i].weight : T->max;
+    i = bisect(T->centroids, x, 0, T->last + 1);
+    l = (i > 0) ? T->merge_centroids[i - 1].weight : T->min;
+    r = (i < T->last) ? T->merge_centroids[i].weight : T->max;
     if (x < l) {
         r = l;
         l = --i ? T->merge_centroids[i - 1].weight : T->min;
     }
-    double weight = (i > 0) ? T->merge_centroids[i - 1].mean : 0;
+    weight = (i > 0) ? T->merge_centroids[i - 1].mean : 0;
     return ((weight + T->centroids[i].weight * interpolate(x, l, r)) /
             T->total_weight);
 }
 
 
-static PyArrayObject *tdigest_cdf_ndarray(tdigest_t *T, PyArrayObject *x) {
+CRICK_INLINE PyArrayObject *tdigest_cdf_ndarray(tdigest_t *T,
+                                                PyArrayObject *x) {
     NpyIter *iter = NULL;
     NpyIter_IterNextFunc *iternext = NULL;
     PyArrayObject *ret = NULL;
@@ -394,7 +410,7 @@ static PyArrayObject *tdigest_cdf_ndarray(tdigest_t *T, PyArrayObject *x) {
     strideptr = NpyIter_GetInnerStrideArray(iter);
     innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
 
-    // Preprocess the centroids
+    /* Preprocess the centroids */
     tdigest_query_prep(T);
     do {
         char *data_x = dataptr[0];
@@ -427,9 +443,12 @@ finish:
 }
 
 
-static double tdigest_quantile(tdigest_t *T, double q) {
+CRICK_INLINE double tdigest_quantile(tdigest_t *T, double q) {
+    double index, l, r, weight;
+    int i;
+
     if (T->total_weight == 0)
-        return NAN;
+        return NPY_NAN;
     if (q <= 0)
         return T->min;
     if (q >= 1)
@@ -437,16 +456,17 @@ static double tdigest_quantile(tdigest_t *T, double q) {
     if (T->last == 0)
         return T->centroids[0].mean;
 
-    double index = q * T->total_weight;
-    int i = bisect(T->merge_centroids, index, 0, T->last + 1);
-    double l = (i > 0) ? T->merge_centroids[i - 1].weight : T->min;
-    double r = (i < T->last) ? T->merge_centroids[i].weight : T->max;
-    double weight = (i > 0) ? T->merge_centroids[i - 1].mean : 0;
+    index = q * T->total_weight;
+    i = bisect(T->merge_centroids, index, 0, T->last + 1);
+    l = (i > 0) ? T->merge_centroids[i - 1].weight : T->min;
+    r = (i < T->last) ? T->merge_centroids[i].weight : T->max;
+    weight = (i > 0) ? T->merge_centroids[i - 1].mean : 0;
     return l + (r - l) * (index - weight) / T->centroids[i].weight;
 }
 
 
-static PyArrayObject *tdigest_quantile_ndarray(tdigest_t *T, PyArrayObject *q) {
+CRICK_INLINE PyArrayObject *tdigest_quantile_ndarray(tdigest_t *T,
+                                                     PyArrayObject *q) {
     NpyIter *iter = NULL;
     NpyIter_IterNextFunc *iternext = NULL;
     PyArrayObject *ret = NULL;
@@ -485,7 +505,7 @@ static PyArrayObject *tdigest_quantile_ndarray(tdigest_t *T, PyArrayObject *q) {
     strideptr = NpyIter_GetInnerStrideArray(iter);
     innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
 
-    // Preprocess the centroids
+    /* Preprocess the centroids */
     tdigest_query_prep(T);
     do {
         char *data_q = dataptr[0];
@@ -518,29 +538,34 @@ finish:
 }
 
 
-static void tdigest_merge(tdigest_t *T, tdigest_t *other) {
+CRICK_INLINE void tdigest_merge(tdigest_t *T, tdigest_t *other) {
+    int i;
+
     tdigest_flush(other);
     if (other->total_weight) {
         centroid_t *centroids = other->centroids;
-        for (int i=0; i < other->last + 1; i++) {
+        for (i=0; i < other->last + 1; i++) {
             tdigest_add(T, centroids[i].mean, centroids[i].weight);
         }
-        T->min = fmin(T->min, other->min);
-        T->max = fmax(T->max, other->max);
+        if (T->min > other->min)
+            T->min = other->min;
+        if (T->max < other->max)
+            T->max = other->max;
     }
 }
 
 
-static void tdigest_scale(tdigest_t *T, double factor) {
-    tdigest_flush(T);
+CRICK_INLINE void tdigest_scale(tdigest_t *T, double factor) {
     double total_weight = 0;
+    tdigest_flush(T);
+
     if (T->total_weight) {
         centroid_t *centroids = T->centroids;
         double w;
-        int j = 0;
-        for (int i=0; i < T->last + 1; i++) {
+        int i, j = 0;
+        for (i=0; i < T->last + 1; i++) {
             w = centroids[i].weight * factor;
-            // If the scaled weight is approximately 0, skip the centroid
+            /* If the scaled weight is approximately 0, skip the centroid */
             if (w > DBL_EPSILON) {
                 centroids[j].weight = w;
                 total_weight += w;
@@ -553,7 +578,7 @@ static void tdigest_scale(tdigest_t *T, double factor) {
 }
 
 
-static npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x,
+CRICK_INLINE npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x,
                                        PyArrayObject *w) {
     NpyIter *iter = NULL;
     NpyIter_IterNextFunc *iternext;
@@ -566,6 +591,7 @@ static npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x,
     char **dataptr;
 
     npy_intp ret = -1;
+    NPY_BEGIN_THREADS_DEF;
 
     /* Handle zero-sized arrays specially */
     if (PyArray_SIZE(x) == 0 || PyArray_SIZE(w) == 0) {
@@ -599,7 +625,6 @@ static npy_intp tdigest_update_ndarray(tdigest_t *T, PyArrayObject *x,
     strideptr = NpyIter_GetInnerStrideArray(iter);
     innersizeptr = NpyIter_GetInnerLoopSizePtr(iter);
 
-    NPY_BEGIN_THREADS_DEF;
     NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));
 
     do {
