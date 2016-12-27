@@ -1,7 +1,7 @@
 import sys
 import os
 
-import numpy as np
+import numpy.distutils.misc_util as np_misc
 from setuptools import setup
 from setuptools.extension import Extension
 from Cython.Build import cythonize
@@ -9,12 +9,14 @@ from Cython import Tempita as tempita
 
 import versioneer
 
+compile_args = np_misc.get_info('npymath')
+compile_args['include_dirs'].append('crick/klib')
 
-kwargs = {'extra_compile_args': ['-std=c89']}
-
+# TODO: debug compilation doesn't work on windows
 if '--debug' in sys.argv:
-    kwargs['undef_macros'] = ["NDEBUG"]
-    kwargs['extra_compile_args'].append('-O0')
+    sys.argv.remove('--debug')
+    compile_args['undef_macros'] = ["NDEBUG"]
+    compile_args['extra_compile_args'] = ['-O0']
 
 
 def generate_code(templates):
@@ -41,17 +43,15 @@ templates = ['crick/space_saving_stubs.c.in']
 
 generate_code(templates)
 
-
 extensions = [Extension("crick.tdigest",
                         ['crick/tdigest.pyx'],
-                        **kwargs),
+                        **compile_args),
               Extension("crick.space_saving",
                         ['crick/space_saving.pyx'],
-                        include_dirs=['crick/klib'],
-                        **kwargs),
+                        **compile_args),
               Extension("crick.stats",
                         ['crick/stats.pyx'],
-                        **kwargs)
+                        **compile_args)
               ]
 
 setup(name='crick',
@@ -67,5 +67,4 @@ setup(name='crick',
       license='BSD',
       packages=['crick', 'crick.tests'],
       ext_modules=cythonize(extensions),
-      include_dirs=[np.get_include()],
       zip_safe=False)

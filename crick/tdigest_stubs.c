@@ -4,11 +4,11 @@
 
 #include <stdlib.h>
 #include <float.h>
-#include <math.h>
 #include <assert.h>
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
+#include <numpy/npy_math.h>
 
 #include "common.h"
 
@@ -62,7 +62,7 @@ CRICK_INLINE tdigest_t *tdigest_new(double compression) {
     T->compression = compression;
 
     /* Select a good size and buffer_size */
-    size = 2 * ceil(compression);
+    size = 2 * npy_ceil(compression);
     buffer_size = (7.5 + 0.37*compression - 2e-4*compression*compression);
 
     T->min = DBL_MAX;
@@ -180,9 +180,9 @@ CRICK_INLINE double integrate(double c, double q) {
      * issues. There's probably a way to rearrange computations so this doesn't
      * ever happen. For now, we threshold here. */
     double out;
-    q = fmin(q, 1);
+    q = (q > 1) ? 1 : q;
 
-    out = (c * (asin(2 * q - 1) + M_PI_2) / M_PI);
+    out = (c * (npy_asin(2 * q - 1) + NPY_PI_2) / NPY_PI);
     assert(out <= c);
     assert(0 <= out);
     return out;
@@ -225,8 +225,10 @@ CRICK_INLINE void tdigest_flush(tdigest_t *T) {
 
     centroid_sort(T->buffer_last, T->buffer_centroids, T->buffer_sort);
 
-    T->min = fmin(T->min, T->buffer_centroids[0].mean);
-    T->max = fmax(T->max, T->buffer_centroids[T->buffer_last - 1].mean);
+    if (T->min > T->buffer_centroids[0].mean)
+        T->min = T->buffer_centroids[0].mean;
+    if (T->max < T->buffer_centroids[T->buffer_last - 1].mean)
+        T->max = T->buffer_centroids[T->buffer_last - 1].mean;
 
     n = (T->total_weight > 0) ? T->last + 1 : 0;
 
@@ -275,11 +277,11 @@ CRICK_INLINE void tdigest_add(tdigest_t *T, double x, double w) {
 
     /* w must be > 0 and finite, for speed we assume the caller has checked this */
     assert(w > 0);
-    assert(isfinite(w));
+    assert(npy_isfinite(w));
 
     /* Ignore x = NAN, INF, and -INF
      * Ignore w <= eps */
-    if (!isfinite(x) || w <= DBL_EPSILON)
+    if (!npy_isfinite(x) || w <= DBL_EPSILON)
         return;
 
     if (T->buffer_last >= T->buffer_size) {
@@ -338,7 +340,7 @@ CRICK_INLINE double tdigest_cdf(tdigest_t *T, double x) {
     int i;
     double l, r, weight;
     if (T->total_weight == 0)
-        return NAN;
+        return NPY_NAN;
     if (x < T->min)
         return 0;
     if (x > T->max)
@@ -446,7 +448,7 @@ CRICK_INLINE double tdigest_quantile(tdigest_t *T, double q) {
     int i;
 
     if (T->total_weight == 0)
-        return NAN;
+        return NPY_NAN;
     if (q <= 0)
         return T->min;
     if (q >= 1)
@@ -545,8 +547,10 @@ CRICK_INLINE void tdigest_merge(tdigest_t *T, tdigest_t *other) {
         for (i=0; i < other->last + 1; i++) {
             tdigest_add(T, centroids[i].mean, centroids[i].weight);
         }
-        T->min = fmin(T->min, other->min);
-        T->max = fmax(T->max, other->max);
+        if (T->min > other->min)
+            T->min = other->min;
+        if (T->max < other->max)
+            T->max = other->max;
     }
 }
 

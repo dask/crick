@@ -253,14 +253,14 @@ CRICK_INLINE int spsv_{{name}}_add(spsv_{{name}}_t *T, {{item_t}} item,
 CRICK_INLINE int spsv_{{name}}_set_state(spsv_{{name}}_t *T,
                                          counter_{{name}}_t *counters,
                                          npy_intp size) {
-    int absent;
+    int i, absent;
     npy_intp index;
     if (size > T->capacity) {
         PyErr_SetString(PyExc_ValueError,
                         "deserialization failed, size > capacity");
         return -1;
     }
-    for (int i=0; i < size; i++) {
+    for (i=0; i < size; i++) {
         counter_{{name}}_t c = counters[i];
         /* Get the pointer to the bucket */
         khiter_t iter = kh_put({{name}}, T->hashmap, c.item, &absent);
@@ -289,6 +289,7 @@ CRICK_INLINE int spsv_{{name}}_set_state(spsv_{{name}}_t *T,
 CRICK_INLINE int spsv_{{name}}_merge(spsv_{{name}}_t *T1, spsv_{{name}}_t *T2) {
     npy_int64 m1, m2;
     npy_intp i1, i2;
+    int i;
     /* Nothing to do */
     if (T2->size == 0) return 0;
 
@@ -327,7 +328,7 @@ CRICK_INLINE int spsv_{{name}}_merge(spsv_{{name}}_t *T1, spsv_{{name}}_t *T2) {
 
     /* Iterate through T2, adding in any missing items */
     i2 = T2->head;
-    for (int i = 0; i < T2->size; i++) {
+    for (i = 0; i < T2->size; i++) {
         int absent;
         counter_{{name}}_t c2 = T2->list[i2].counter;
         khiter_t iter = kh_put({{name}}, T1->hashmap, c2.item, &absent);
