@@ -10,7 +10,7 @@ from Cython import Tempita as tempita
 import versioneer
 
 
-kwargs = {'extra_compile_args': ['-std=c99']}
+kwargs = {'extra_compile_args': ['-std=c89']}
 
 if '--debug' in sys.argv:
     kwargs['undef_macros'] = ["NDEBUG"]
