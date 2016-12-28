@@ -3,7 +3,7 @@ recursive-include crick *.py
 recursive-include crick *.c
 
 include setup.py
-include README.md
+include README.rst
 include LICENSE
 include EXTERNAL_LICENSES
 include MANIFEST.in
