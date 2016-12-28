@@ -1,6 +1,7 @@
 recursive-include crick *.pyx
 recursive-include crick *.py
 recursive-include crick *.c
+recursive-include crick *.h
 
 include setup.py
 include README.rst

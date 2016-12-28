@@ -26,8 +26,10 @@ def generate_code(templates):
         outfile = template[:-3]
 
         if (os.path.exists(outfile) and
-                os.stat(template).st_mtime < os.stat(outfile).st_mtime):
-            # if template is not updated, no need to generate
+                (not os.path.exists(template) or
+                 os.stat(template).st_mtime < os.stat(outfile).st_mtime)):
+            # If output is present but template isn't, or if template is not
+            # updated no need to generate
             continue
 
         with open(template, "r") as f:
