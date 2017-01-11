@@ -8,13 +8,13 @@ environment:
         CMD_IN_ENV: "cmd /E:ON /V:ON /C .\\tools\\run_with_env.cmd"
 
     matrix:
-        - PYTHON_VERSION: "3.5"
+        - PYTHON_VERSION: "3.6"
           PYTHON_ARCH: "64"
           NUMPY: "1.11"
 
         - PYTHON_VERSION: "2.7"
           PYTHON_ARCH: "64"
-          NUMPY: "1.10.4"
+          NUMPY: "1.10"
 
 platform:
     - x64
