@@ -299,27 +299,34 @@ CRICK_INLINE void tdigest_add(tdigest_t *T, double x, double w) {
 
 CRICK_INLINE void tdigest_query_prep(tdigest_t *T) {
     int i;
-    centroid_t a, b;
+    centroid_t current;
+    double cumulative_weight;
 
     /* Prep for computing quantiles or cdf */
     tdigest_flush(T);
 
-    b = T->centroids[0];
-    T->merge_centroids[0].mean = b.weight;
-
-    for (i = 1; i < T->last + 1; i++) {
-        a = b;
-        b = T->centroids[i];
-
-        T->merge_centroids[i].mean = T->merge_centroids[i - 1].mean + b.weight;
-        T->merge_centroids[i - 1].weight = (a.mean + (b.mean - a.mean) *
-                                            a.weight / (a.weight + b.weight));
+    cumulative_weight = 0.0;
+    for (i = 0; i < T->last + 1; i++) {
+        current = T->centroids[i];
+        T->merge_centroids[i].mean = current.mean;
+        T->merge_centroids[i].weight = cumulative_weight + current.weight / 2.0;
+        cumulative_weight += current.weight;
     }
-    T->merge_centroids[T->last].weight = T->max;
+}
+
+CRICK_INLINE int bisect_weight(centroid_t *arr, double index, int lo, int hi) {
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+        if (arr[mid].weight < index)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo;
 }
 
 
-CRICK_INLINE int bisect(centroid_t *arr, double index, int lo, int hi) {
+CRICK_INLINE int bisect_mean(centroid_t *arr, double index, int lo, int hi) {
     while (lo < hi) {
         int mid = (lo + hi) / 2;
         if (arr[mid].mean < index)
@@ -331,16 +338,15 @@ CRICK_INLINE int bisect(centroid_t *arr, double index, int lo, int hi) {
 }
 
 
-CRICK_INLINE double interpolate(double x, double x0, double x1) {
-    return (x - x0) / (x1 - x0);
-}
-
-
 CRICK_INLINE double tdigest_cdf(tdigest_t *T, double x) {
     int i;
-    double l, r, weight;
+    double x0, y0, x1, y1;
+
+    /* No data */
     if (T->total_weight == 0)
         return NPY_NAN;
+
+    /* Bounds checks */
     if (x < T->min)
         return 0;
     if (x > T->max)
@@ -349,7 +355,7 @@ CRICK_INLINE double tdigest_cdf(tdigest_t *T, double x) {
     if (T->last == 0) {
         if (T->max - T->min < DBL_EPSILON)
             return 0.5;
-        return interpolate(x, T->min, T->max);
+        return (x - T->min) / (T->max - T->min);
     }
     /* Equality checks only apply if > 1 centroid */
     if (x == T->max)
@@ -357,16 +363,25 @@ CRICK_INLINE double tdigest_cdf(tdigest_t *T, double x) {
     if (x == T->min)
         return 0;
 
-    i = bisect(T->centroids, x, 0, T->last + 1);
-    l = (i > 0) ? T->merge_centroids[i - 1].weight : T->min;
-    r = (i < T->last) ? T->merge_centroids[i].weight : T->max;
-    if (x < l) {
-        r = l;
-        l = --i ? T->merge_centroids[i - 1].weight : T->min;
+    i = bisect_mean(T->merge_centroids, x, 0, T->last + 1);
+
+    if (i == 0) {
+        x0 = T->min;
+        y0 = 0;
+    } else {
+        x0 = T->merge_centroids[i].mean;
+        y0 = T->merge_centroids[i].weight;
     }
-    weight = (i > 0) ? T->merge_centroids[i - 1].mean : 0;
-    return ((weight + T->centroids[i].weight * interpolate(x, l, r)) /
-            T->total_weight);
+
+    if (i == T->last) {
+        x1 = T->max;
+        y1 = T->total_weight;
+    } else {
+        x1 = T->merge_centroids[i + 1].mean;
+        y1 = T->merge_centroids[i + 1].weight;
+    }
+
+    return ((x - x0) * (y1 - y0) / (x1 - x0)) / T->total_weight;
 }
 
 
@@ -444,7 +459,7 @@ finish:
 
 
 CRICK_INLINE double tdigest_quantile(tdigest_t *T, double q) {
-    double index, l, r, weight;
+    double index, x0, y0, x1, y1;
     int i;
 
     if (T->total_weight == 0)
@@ -457,11 +472,25 @@ CRICK_INLINE double tdigest_quantile(tdigest_t *T, double q) {
         return T->centroids[0].mean;
 
     index = q * T->total_weight;
-    i = bisect(T->merge_centroids, index, 0, T->last + 1);
-    l = (i > 0) ? T->merge_centroids[i - 1].weight : T->min;
-    r = (i < T->last) ? T->merge_centroids[i].weight : T->max;
-    weight = (i > 0) ? T->merge_centroids[i - 1].mean : 0;
-    return l + (r - l) * (index - weight) / T->centroids[i].weight;
+    i = bisect_weight(T->merge_centroids, index, 0, T->last + 1);
+
+    if (i == 0) {
+        x0 = 0;
+        y0 = T->min;
+    } else {
+        x0 = T->merge_centroids[i - 1].weight;
+        y0 = T->merge_centroids[i - 1].mean;
+    }
+
+    if (i == T->last + 1) {
+        x1 = T->total_weight;
+        y1 = T->max;
+    } else {
+        x1 = T->merge_centroids[i].weight;
+        y1 = T->merge_centroids[i].mean;
+    }
+
+    return y0 + (index - x0) * (y1 - y0) / (x1 - x0);
 }
 
 
