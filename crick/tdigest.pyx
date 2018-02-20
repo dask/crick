@@ -24,7 +24,7 @@ cdef extern from "tdigest_stubs.c":
         double min
         double max
 
-        size_t last
+        size_t ncentroids
         double total_weight
         double buffer_total_weight
         centroid_t *centroids
@@ -236,10 +236,7 @@ cdef class TDigest:
         """
         cdef size_t n
         tdigest_flush(self.tdigest)
-        if (self.tdigest.total_weight == 0):
-            n = 0
-        else:
-            n = self.tdigest.last + 1
+        n = self.tdigest.ncentroids
 
         cdef np.ndarray[centroid_t, ndim=1] result = np.empty(n, dtype=CENTROID_DTYPE)
         if n > 0:
@@ -263,7 +260,7 @@ cdef class TDigest:
         if n > 0:
             memcpy(self.tdigest.centroids, centroids.data,
                    n * sizeof(centroid_t))
-            self.tdigest.last = n - 1
+            self.tdigest.ncentroids = n
 
     def add(self, double x, double w=1):
         """add(self, x, w=1)

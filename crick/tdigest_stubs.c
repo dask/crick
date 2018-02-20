@@ -29,7 +29,7 @@ typedef struct tdigest {
 
     /* long-term storage of centroids */
     int size;
-    int last;
+    int ncentroids;
     double total_weight;
     centroid_t *centroids;
 
@@ -38,7 +38,7 @@ typedef struct tdigest {
 
     /* short-term storage of centroids */
     int buffer_size;
-    int buffer_last;
+    int buffer_ncentroids;
     double buffer_total_weight;
     centroid_t *buffer_centroids;
 
@@ -70,7 +70,7 @@ CRICK_INLINE tdigest_t *tdigest_new(double compression) {
 
     T->size = size;
     T->total_weight = 0;
-    T->last = 0;
+    T->ncentroids = 0;
     T->centroids = calloc(size, sizeof(centroid_t));
     if (T->centroids == NULL)
         goto fail;
@@ -80,7 +80,7 @@ CRICK_INLINE tdigest_t *tdigest_new(double compression) {
 
     T->buffer_size = buffer_size;
     T->buffer_total_weight = 0;
-    T->buffer_last = 0;
+    T->buffer_ncentroids = 0;
     T->buffer_centroids = calloc(buffer_size, sizeof(centroid_t));
     if (T->buffer_centroids == NULL)
         goto fail;
@@ -192,23 +192,24 @@ CRICK_INLINE double integrate(double c, double q) {
 CRICK_INLINE double centroid_merge(tdigest_t *T, double weight_so_far,
                                    double k1, double u, double w) {
     double k2 = integrate(T->compression, (weight_so_far + w) / T->total_weight);
-    int n = T->last;
+    int n = T->ncentroids;
 
-    if (weight_so_far == 0) {
-        assert(n < T->size);
-        T->merge_centroids[n].weight = w;
-        T->merge_centroids[n].mean = u;
+    if (n == 0) {
+        /* First centroid */
+        T->ncentroids = ++n;
+        T->merge_centroids[n - 1].weight = w;
+        T->merge_centroids[n - 1].mean = u;
     }
     else if ((k2 - k1) <= 1) {
         assert(n < T->size);
-        T->merge_centroids[n].weight += w;
-        T->merge_centroids[n].mean += ((u - T->merge_centroids[n].mean) *
-                                       w / T->merge_centroids[n].weight);
+        T->merge_centroids[n - 1].weight += w;
+        T->merge_centroids[n - 1].mean += ((u - T->merge_centroids[n - 1].mean) *
+                                           w / T->merge_centroids[n - 1].weight);
     } else {
-        T->last = ++n;
+        T->ncentroids = ++n;
         assert(n < T->size);
-        T->merge_centroids[n].weight = w;
-        T->merge_centroids[n].mean = u;
+        T->merge_centroids[n - 1].weight = w;
+        T->merge_centroids[n - 1].mean = u;
         k1 = integrate(T->compression, weight_so_far / T->total_weight);
     }
     return k1;
@@ -220,23 +221,23 @@ CRICK_INLINE void tdigest_flush(tdigest_t *T) {
     double k1 = 0, weight_so_far = 0;
     centroid_t c, *swap;
 
-    if (T->buffer_last == 0)
+    if (T->buffer_ncentroids == 0)
         return;
 
-    centroid_sort(T->buffer_last, T->buffer_centroids, T->buffer_sort);
+    centroid_sort(T->buffer_ncentroids, T->buffer_centroids, T->buffer_sort);
 
     if (T->min > T->buffer_centroids[0].mean)
         T->min = T->buffer_centroids[0].mean;
-    if (T->max < T->buffer_centroids[T->buffer_last - 1].mean)
-        T->max = T->buffer_centroids[T->buffer_last - 1].mean;
+    if (T->max < T->buffer_centroids[T->buffer_ncentroids - 1].mean)
+        T->max = T->buffer_centroids[T->buffer_ncentroids - 1].mean;
 
-    n = (T->total_weight > 0) ? T->last + 1 : 0;
+    n = T->ncentroids;
 
-    T->last = 0;
+    T->ncentroids = 0;
     T->total_weight += T->buffer_total_weight;
     T->buffer_total_weight = 0;
 
-    while (i < T->buffer_last && j < n) {
+    while (i < T->buffer_ncentroids && j < n) {
         if (centroid_compare(T->buffer_centroids[i], T->centroids[j])) {
             assert(i < T->buffer_size);
             c = T->buffer_centroids[i];
@@ -250,7 +251,7 @@ CRICK_INLINE void tdigest_flush(tdigest_t *T) {
         weight_so_far += c.weight;
     }
 
-    for (; i < T->buffer_last; i++) {
+    for (; i < T->buffer_ncentroids; i++) {
         assert(i < T->buffer_size);
         c = T->buffer_centroids[i];
         k1 = centroid_merge(T, weight_so_far, k1, c.mean, c.weight);
@@ -264,7 +265,7 @@ CRICK_INLINE void tdigest_flush(tdigest_t *T) {
         weight_so_far += c.weight;
     }
 
-    T->buffer_last = 0;
+    T->buffer_ncentroids = 0;
 
     swap = T->centroids;
     T->centroids = T->merge_centroids;
@@ -284,11 +285,11 @@ CRICK_INLINE void tdigest_add(tdigest_t *T, double x, double w) {
     if (!npy_isfinite(x) || w <= DBL_EPSILON)
         return;
 
-    if (T->buffer_last >= T->buffer_size) {
+    if (T->buffer_ncentroids == T->buffer_size) {
         tdigest_flush(T);
     }
 
-    n = T->buffer_last++;
+    n = T->buffer_ncentroids++;
     assert(n < T->buffer_size);
 
     T->buffer_centroids[n].mean = x;
@@ -306,7 +307,7 @@ CRICK_INLINE void tdigest_query_prep(tdigest_t *T) {
     tdigest_flush(T);
 
     cumulative_weight = 0.0;
-    for (i = 0; i < T->last + 1; i++) {
+    for (i = 0; i < T->ncentroids; i++) {
         current = T->centroids[i];
         T->merge_centroids[i].mean = current.mean;
         T->merge_centroids[i].weight = cumulative_weight + current.weight / 2.0;
@@ -352,7 +353,7 @@ CRICK_INLINE double tdigest_cdf(tdigest_t *T, double x) {
     if (x > T->max)
         return 1;
 
-    if (T->last == 0) {
+    if (T->ncentroids == 1) {
         if (T->max - T->min < DBL_EPSILON)
             return 0.5;
         return (x - T->min) / (T->max - T->min);
@@ -363,7 +364,7 @@ CRICK_INLINE double tdigest_cdf(tdigest_t *T, double x) {
     if (x == T->min)
         return 0;
 
-    i = bisect_mean(T->merge_centroids, x, 0, T->last + 1);
+    i = bisect_mean(T->merge_centroids, x, 0, T->ncentroids);
 
     if (i == 0) {
         x0 = T->min;
@@ -373,7 +374,7 @@ CRICK_INLINE double tdigest_cdf(tdigest_t *T, double x) {
         y0 = T->merge_centroids[i].weight;
     }
 
-    if (i == T->last) {
+    if (i == T->ncentroids) {
         x1 = T->max;
         y1 = T->total_weight;
     } else {
@@ -468,11 +469,11 @@ CRICK_INLINE double tdigest_quantile(tdigest_t *T, double q) {
         return T->min;
     if (q >= 1)
         return T->max;
-    if (T->last == 0)
+    if (T->ncentroids == 1)
         return T->centroids[0].mean;
 
     index = q * T->total_weight;
-    i = bisect_weight(T->merge_centroids, index, 0, T->last + 1);
+    i = bisect_weight(T->merge_centroids, index, 0, T->ncentroids);
 
     if (i == 0) {
         x0 = 0;
@@ -482,7 +483,7 @@ CRICK_INLINE double tdigest_quantile(tdigest_t *T, double q) {
         y0 = T->merge_centroids[i - 1].mean;
     }
 
-    if (i == T->last + 1) {
+    if (i == T->ncentroids) {
         x1 = T->total_weight;
         y1 = T->max;
     } else {
@@ -573,7 +574,7 @@ CRICK_INLINE void tdigest_merge(tdigest_t *T, tdigest_t *other) {
     tdigest_flush(other);
     if (other->total_weight) {
         centroid_t *centroids = other->centroids;
-        for (i=0; i < other->last + 1; i++) {
+        for (i=0; i < other->ncentroids; i++) {
             tdigest_add(T, centroids[i].mean, centroids[i].weight);
         }
         if (T->min > other->min)
@@ -592,7 +593,7 @@ CRICK_INLINE void tdigest_scale(tdigest_t *T, double factor) {
         centroid_t *centroids = T->centroids;
         double w;
         int i, j = 0;
-        for (i=0; i < T->last + 1; i++) {
+        for (i=0; i < T->ncentroids; i++) {
             w = centroids[i].weight * factor;
             /* If the scaled weight is approximately 0, skip the centroid */
             if (w > DBL_EPSILON) {
@@ -602,7 +603,7 @@ CRICK_INLINE void tdigest_scale(tdigest_t *T, double factor) {
             }
         }
         T->total_weight = total_weight;
-        T->last = j == 0 ? j : j - 1;
+        T->ncentroids = j;
     }
 }
 
