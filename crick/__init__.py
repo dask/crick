@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 from .tdigest import TDigest
 from .space_saving import SpaceSaving
-from .stats import SummaryStats
+from ._lib import SummaryStats
 
 from ._version import get_versions
 versions = get_versions()

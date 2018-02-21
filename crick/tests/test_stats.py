@@ -120,7 +120,7 @@ def test_add_update_errors():
     with pytest.raises(ValueError):
         s.update(x, np.nan)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         s.add(1, np.nan)
 
 
