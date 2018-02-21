@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <float.h>
 #include <assert.h>
+#include <signal.h>
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
@@ -327,7 +328,7 @@ CRICK_INLINE int bisect_weight(centroid_t *arr, double index, int lo, int hi) {
 }
 
 
-CRICK_INLINE int bisect_mean(centroid_t *arr, double index, int lo, int hi) {
+CRICK_INLINE int bisect_left_mean(centroid_t *arr, double index, int lo, int hi) {
     while (lo < hi) {
         int mid = (lo + hi) / 2;
         if (arr[mid].mean < index)
@@ -338,51 +339,72 @@ CRICK_INLINE int bisect_mean(centroid_t *arr, double index, int lo, int hi) {
     return lo;
 }
 
+CRICK_INLINE int bisect_right_mean(centroid_t *arr, double index, int lo, int hi) {
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+        if (index < arr[mid].mean)
+            hi = mid;
+        else
+            lo = mid + 1;
+    }
+    if (lo && arr[lo - 1].mean == index)
+        lo--;
+    return lo;
+}
+
 
 CRICK_INLINE double tdigest_cdf(tdigest_t *T, double x) {
-    int i;
-    double x0, y0, x1, y1;
+    int i_l, i_r;
+    double x0, x1, dw;
 
     /* No data */
-    if (T->total_weight == 0)
+    if (T->ncentroids == 0)
         return NPY_NAN;
 
-    /* Bounds checks */
-    if (x < T->min)
-        return 0;
-    if (x > T->max)
-        return 1;
-
+    /* Single centroid */
     if (T->ncentroids == 1) {
+        if (x < T->min)
+            return 0;
+        if (x > T->max)
+            return 1;
         if (T->max - T->min < DBL_EPSILON)
             return 0.5;
         return (x - T->min) / (T->max - T->min);
     }
+
     /* Equality checks only apply if > 1 centroid */
-    if (x == T->max)
+    if (x >= T->max)
         return 1;
-    if (x == T->min)
+    if (x <= T->min)
         return 0;
 
-    i = bisect_mean(T->merge_centroids, x, 0, T->ncentroids);
+    i_l = bisect_left_mean(T->merge_centroids, x, 0, T->ncentroids);
 
-    if (i == 0) {
+    if (x < T->centroids[0].mean) {
+        /* min < x < first centroid */
         x0 = T->min;
-        y0 = 0;
-    } else {
-        x0 = T->merge_centroids[i].mean;
-        y0 = T->merge_centroids[i].weight;
-    }
-
-    if (i == T->ncentroids) {
+        x1 = T->merge_centroids[0].mean;
+        dw = T->merge_centroids[0].weight / 2;
+        return dw * (x - x0) / (x1 - x0) / T->total_weight;
+    } else if (i_l == T->ncentroids) {
+        /* last centroid < x < max */
+        x0 = T->centroids[i_l - 1].mean;
         x1 = T->max;
-        y1 = T->total_weight;
+        dw = T->centroids[i_l - 1].weight / 2;
+        return 1 - dw * (x1 - x) / (x1 - x0) / T->total_weight;
+    } else if (T->centroids[i_l].mean == x) {
+        /* x is equal to one or more centroids */
+        i_r = bisect_right_mean(T->merge_centroids, x, i_l, T->ncentroids);
+        return T->merge_centroids[i_r].weight / T->total_weight;
     } else {
-        x1 = T->merge_centroids[i + 1].mean;
-        y1 = T->merge_centroids[i + 1].weight;
+        /* x is between centroids i_l - 1 and i_l */
+        assert(T->centroids[i_l].mean > x);
+        x0 = T->centroids[i_l - 1].mean;
+        x1 = T->centroids[i_l].mean;
+        dw = (T->centroids[i_l - 1].weight + T->centroids[i_l].weight) / 2;
+        return (T->merge_centroids[i_l - 1].weight
+                + dw * (x - x0) / (x1 - x0)) / T->total_weight;
     }
-
-    return ((x - x0) * (y1 - y0) / (x1 - x0)) / T->total_weight;
 }
 
 
