@@ -10,11 +10,11 @@ environment:
     matrix:
         - PYTHON_VERSION: "3.6"
           PYTHON_ARCH: "64"
-          NUMPY: "1.11"
+          NUMPY: "1.13"
 
         - PYTHON_VERSION: "2.7"
           PYTHON_ARCH: "64"
-          NUMPY: "1.10"
+          NUMPY: "1.11"
 
 platform:
     - x64

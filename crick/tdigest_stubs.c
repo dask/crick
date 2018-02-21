@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <float.h>
 #include <assert.h>
-#include <signal.h>
 
 #include <Python.h>
 #include <numpy/arrayobject.h>
