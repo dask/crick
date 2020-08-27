@@ -85,7 +85,7 @@ cdef np.dtype COUNTER_FLOAT64_DTYPE = np.dtype(
 
 cdef np.dtype COUNTER_OBJECT_DTYPE = np.dtype(
         {'names': ['item', 'count', 'error'],
-         'formats': [np.object, np.int64, np.int64],
+         'formats': [object, np.int64, np.int64],
          'offsets': [<size_t> &(<counter_object_t*> NULL).item,
                      <size_t> &(<counter_object_t*> NULL).count,
                      <size_t> &(<counter_object_t*> NULL).error
