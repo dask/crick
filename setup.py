@@ -50,8 +50,8 @@ extensions = [Extension("crick.tdigest",
               Extension("crick.space_saving",
                         ['crick/space_saving.pyx'],
                         **compile_args),
-              Extension("crick.stats",
-                        ['crick/stats.pyx'],
+              Extension("crick._lib",
+                        ['crick/_lib.c'],
                         **compile_args)
               ]
 
