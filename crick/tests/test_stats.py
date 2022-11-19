@@ -1,4 +1,4 @@
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
 
 import pickle
 from copy import copy
@@ -22,8 +22,10 @@ datasets = [normal, empty, one, duplicate, different]
 RTOL = 0
 ATOL = 1e-8
 
+scipy_xfail_mark = pytest.mark.xfail(reason="modern scipy return NaN")
 
-@pytest.mark.parametrize('x', datasets)
+
+@pytest.mark.parametrize("x", datasets)
 def test_basic_stats(x):
     s = SummaryStats()
     s.update(x)
@@ -32,18 +34,30 @@ def test_basic_stats(x):
     np.testing.assert_allclose(s.sum(), np.nansum(x), rtol=RTOL, atol=ATOL)
     np.testing.assert_equal(s.min(), np.nanmin(x) if len(x) else np.nan)
     np.testing.assert_equal(s.max(), np.nanmax(x) if len(x) else np.nan)
-    np.testing.assert_allclose(s.mean(), np.nanmean(x) if len(x) else np.nan,
-                               rtol=RTOL, atol=ATOL)
-    np.testing.assert_allclose(s.var(), np.nanvar(x) if len(x) else np.nan,
-                               rtol=RTOL, atol=ATOL)
-    np.testing.assert_allclose(s.std(), np.nanstd(x) if len(x) else np.nan,
-                               rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(
+        s.mean(), np.nanmean(x) if len(x) else np.nan, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        s.var(), np.nanvar(x) if len(x) else np.nan, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        s.std(), np.nanstd(x) if len(x) else np.nan, rtol=RTOL, atol=ATOL
+    )
 
 
-@pytest.mark.parametrize('x', datasets)
-@pytest.mark.parametrize('bias', [True, False])
+@pytest.mark.parametrize(
+    "x",
+    [
+        normal,
+        empty,
+        pytest.param(one, marks=scipy_xfail_mark),
+        pytest.param(duplicate, marks=scipy_xfail_mark),
+        different,
+    ],
+)
+@pytest.mark.parametrize("bias", [True, False])
 def test_skew(x, bias):
-    stats = pytest.importorskip('scipy.stats')
+    stats = pytest.importorskip("scipy.stats")
     s = SummaryStats()
     s.update(x)
     res = s.skew(bias=bias)
@@ -51,11 +65,20 @@ def test_skew(x, bias):
     np.testing.assert_allclose(res, sol, rtol=RTOL, atol=ATOL)
 
 
-@pytest.mark.parametrize('x', datasets)
-@pytest.mark.parametrize('bias', [True, False])
-@pytest.mark.parametrize('fisher', [True, False])
+@pytest.mark.parametrize(
+    "x",
+    [
+        normal,
+        empty,
+        pytest.param(one, marks=scipy_xfail_mark),
+        pytest.param(duplicate, marks=scipy_xfail_mark),
+        different,
+    ],
+)
+@pytest.mark.parametrize("bias", [True, False])
+@pytest.mark.parametrize("fisher", [True, False])
 def test_kurt(x, bias, fisher):
-    stats = pytest.importorskip('scipy.stats')
+    stats = pytest.importorskip("scipy.stats")
     s = SummaryStats()
     s.update(x)
 
@@ -67,7 +90,7 @@ def test_kurt(x, bias, fisher):
     np.testing.assert_allclose(res, sol, rtol=RTOL, atol=ATOL)
 
 
-@pytest.mark.parametrize('x', [empty, normal])
+@pytest.mark.parametrize("x", [empty, normal])
 def test_pickle(x):
     s = SummaryStats()
     s.update(x)
@@ -83,9 +106,9 @@ def test_pickle(x):
 
 def test_repr():
     s = SummaryStats()
-    assert str(s) == 'SummaryStats<count=0>'
+    assert str(s) == "SummaryStats<count=0>"
     s.add(10)
-    assert str(s) == 'SummaryStats<count=1>'
+    assert str(s) == "SummaryStats<count=1>"
 
 
 def test_weights():
@@ -126,7 +149,7 @@ def test_add_update_errors():
 
 def test_merge():
     s = SummaryStats()
-    half = int(len(normal)/2)
+    half = int(len(normal) / 2)
     s.update(normal[:half])
     s2 = SummaryStats()
     s2.update(normal[half:])
