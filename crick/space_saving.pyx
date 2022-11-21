@@ -1,7 +1,7 @@
 cimport cython
-from cpython.ref cimport PyObject, Py_INCREF
-
 cimport numpy as np
+from cpython.ref cimport Py_INCREF, PyObject
+
 import numpy as np
 
 np.import_array()

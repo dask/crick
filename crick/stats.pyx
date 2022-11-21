@@ -1,5 +1,6 @@
-from numpy.math cimport NAN
 cimport numpy as np
+from numpy.math cimport NAN
+
 import numpy as np
 
 np.import_array()
