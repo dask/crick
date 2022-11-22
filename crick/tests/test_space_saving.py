@@ -1,4 +1,3 @@
-
 import pickle
 import sys
 from collections import namedtuple
