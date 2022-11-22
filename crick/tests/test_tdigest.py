@@ -1,12 +1,9 @@
-from __future__ import print_function, division, absolute_import
-
 import pickle
 
 import numpy as np
 import pytest
 
 from crick import TDigest
-
 
 # -- Distributions for testing --
 N = 100000
@@ -27,28 +24,36 @@ sequential = np.arange(N) * 1e-5
 reverse_sequential = np.arange(N, 0, -1) * 1e-5
 
 # A mix of a narrow normal and a uniform distribution
-mixed = np.concatenate([np.random.normal(0, 1e-5, N//2),
-                        np.random.uniform(-1, 1, N//2)])
+mixed = np.concatenate(
+    [np.random.normal(0, 1e-5, N // 2), np.random.uniform(-1, 1, N // 2)]
+)
 np.random.shuffle(mixed)
 
 # A step function, each value repeated 100 times
-step = np.concatenate([np.arange(N/100)] * 100)
+step = np.concatenate([np.arange(N / 100)] * 100)
 np.random.shuffle(step)
 
 # Sorted of above
 sorted_step = np.sort(step)
 
 
-distributions = [gamma, uniform, normal, sequential, reverse_sequential,
-                 mixed, step, sorted_step, ]
+distributions = [
+    gamma,
+    uniform,
+    normal,
+    sequential,
+    reverse_sequential,
+    mixed,
+    step,
+    sorted_step,
+]
 
 
 def quantiles_to_q(data, quant):
     """Convert quantiles of data to the q they represent"""
     N = len(data)
     quant2 = quant[:, None]
-    return (2 * (data < quant2).sum(axis=1) +
-            (data == quant2).sum(axis=1)) / (2 * N)
+    return (2 * (data < quant2).sum(axis=1) + (data == quant2).sum(axis=1)) / (2 * N)
 
 
 def q_to_x(data, q):
@@ -79,7 +84,7 @@ def check_valid_quantile_and_cdf(t):
     assert ((res >= 0) & (res <= 1)).all()
 
 
-@pytest.mark.parametrize('data', distributions)
+@pytest.mark.parametrize("data", distributions)
 def test_distributions(data):
     t = TDigest()
     t.update(data)
@@ -107,7 +112,7 @@ def test_init():
     assert t.compression == 500
 
     with pytest.raises(TypeError):
-        TDigest('foo')
+        TDigest("foo")
 
     for c in [np.nan, np.inf, -np.inf]:
         with pytest.raises(ValueError):
@@ -176,7 +181,7 @@ def test_nonfinite():
 
 
 def test_small_w():
-    eps = np.finfo('f8').eps
+    eps = np.finfo("f8").eps
     t = TDigest()
     t.update(gamma, eps)
     assert t.size() == 0
@@ -189,7 +194,7 @@ def test_small_w():
 
 
 def test_update_non_numeric_errors():
-    data = np.array(['foo', 'bar', 'baz'])
+    data = np.array(["foo", "bar", "baz"])
     t = TDigest()
 
     with pytest.raises(TypeError):
@@ -199,10 +204,10 @@ def test_update_non_numeric_errors():
         t.update(1, data)
 
     with pytest.raises(TypeError):
-        t.add('foo')
+        t.add("foo")
 
     with pytest.raises(TypeError):
-        t.add(1, 'foo')
+        t.add(1, "foo")
 
 
 def test_quantile_and_cdf_non_numeric():
@@ -210,16 +215,16 @@ def test_quantile_and_cdf_non_numeric():
     t.update(np.arange(5))
 
     with pytest.raises(TypeError):
-        t.quantile('foo')
+        t.quantile("foo")
 
     with pytest.raises(TypeError):
-        t.update(['foo'])
+        t.update(["foo"])
 
     with pytest.raises(TypeError):
-        t.cdf('foo')
+        t.cdf("foo")
 
     with pytest.raises(TypeError):
-        t.cdf(['foo'])
+        t.cdf(["foo"])
 
 
 def test_quantile_and_cdf_shape():
@@ -234,9 +239,11 @@ def test_quantile_and_cdf_shape():
     res = t.cdf(())
     assert res.shape == (0,)
 
-    qs = [np.array([0.5, 0.9]),
-          np.array([[0.5, 0.9], [0, 1]]),
-          np.linspace(0, 1, 100)[10:-10:2]]
+    qs = [
+        np.array([0.5, 0.9]),
+        np.array([[0.5, 0.9], [0, 1]]),
+        np.linspace(0, 1, 100)[10:-10:2],
+    ]
     for q in qs:
         res = t.quantile(q)
         assert res.shape == q.shape
@@ -256,10 +263,10 @@ def test_histogram():
 
     min = t.min()
     max = t.max()
-    eps = np.finfo('f8').eps
-    bins = np.array([min - 1, min - eps,
-                     min, min + (max - min)/2, max,
-                     max + eps, max + 1])
+    eps = np.finfo("f8").eps
+    bins = np.array(
+        [min - 1, min - eps, min, min + (max - min) / 2, max, max + eps, max + 1]
+    )
     hist, bins2 = t.histogram(bins)
     np.testing.assert_allclose(bins, bins2)
     assert hist[0] == 0
@@ -312,7 +319,7 @@ def test_histogram_errors():
     t = TDigest()
     t.update(np.random.uniform(1000))
 
-    for r in [('a', 'b'), 1]:
+    for r in [("a", "b"), 1]:
         with pytest.raises(TypeError):
             t.histogram(range=r)
 
@@ -326,8 +333,13 @@ def test_histogram_errors():
     with pytest.raises(ValueError):
         t.histogram(range=(1, 0))
 
-    for b in ['a', -1, np.arange(4).reshape((2, 2)),
-              np.arange(0, 10, -1), np.array([np.nan, 0, 1])]:
+    for b in [
+        "a",
+        -1,
+        np.arange(4).reshape((2, 2)),
+        np.arange(0, 10, -1),
+        np.array([np.nan, 0, 1]),
+    ]:
         with pytest.raises(ValueError):
             t.histogram(bins=b)
 
@@ -393,7 +405,7 @@ def test_merge():
     np.testing.assert_allclose(q, q_est, atol=0.005)
 
     with pytest.raises(TypeError):
-        t.merge(t2, 'not a tdigest')
+        t.merge(t2, "not a tdigest")
 
 
 def test_scale():
@@ -408,21 +420,20 @@ def test_scale():
         assert t.max() == t2.max()
         a = t.centroids()
         b = t2.centroids()
-        np.testing.assert_array_equal(a['mean'], b['mean'])
-        np.testing.assert_allclose(a['weight'] * factor, b['weight'])
+        np.testing.assert_array_equal(a["mean"], b["mean"])
+        np.testing.assert_allclose(a["weight"] * factor, b["weight"])
 
     for val in [-0.5, 0, np.nan, np.inf]:
         with pytest.raises(ValueError):
             t.scale(val)
 
     with pytest.raises(TypeError):
-        t.scale('foobar')
+        t.scale("foobar")
 
     # Test scale compacts
-    eps = np.finfo('f8').eps
+    eps = np.finfo("f8").eps
     t = TDigest()
-    t.update([1, 2, 3, 4, 5],
-             [1, 1000, 1, 10000, 1])
+    t.update([1, 2, 3, 4, 5], [1, 1000, 1, 10000, 1])
     t2 = t.scale(eps)
     assert len(t2.centroids()) == 2
 
