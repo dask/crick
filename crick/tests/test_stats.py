@@ -1,4 +1,3 @@
-
 import pickle
 from copy import copy
 
@@ -49,7 +48,7 @@ def test_basic_stats(x):
     [
         normal,
         empty,
-        pytest.param(one, marks=scipy_xfail_mark),
+        one,
         pytest.param(duplicate, marks=scipy_xfail_mark),
         different,
     ],
@@ -69,7 +68,7 @@ def test_skew(x, bias):
     [
         normal,
         empty,
-        pytest.param(one, marks=scipy_xfail_mark),
+        one,
         pytest.param(duplicate, marks=scipy_xfail_mark),
         different,
     ],

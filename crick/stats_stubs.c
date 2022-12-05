@@ -99,6 +99,7 @@ CRICK_INLINE double stats_std(stats_t *T, long ddof) {
 
 CRICK_INLINE double stats_skew(stats_t *T, int bias) {
     double n, m2, m3, skew;
+    // XXX: this should check that T->nunique > 1
     if (T->count < 2) return NPY_NAN;
     n = T->count;
     m2 = T->m2 / T->count;
@@ -112,6 +113,7 @@ CRICK_INLINE double stats_skew(stats_t *T, int bias) {
 
 CRICK_INLINE double stats_kurt(stats_t *T, int fisher, int bias) {
     double n, m2, m4, kurt;
+    // XXX: this should check that T->nunique > 1
     if (T->count < 2) return NPY_NAN;
     n = T->count;
     m2 = T->m2 / T->count;
