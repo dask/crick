@@ -8,6 +8,10 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "crick"
+requires-python = ">=3.8"
+
 [tool.versioneer]
 VCS = "git"
 style = "pep440"
