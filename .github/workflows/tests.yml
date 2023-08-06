@@ -34,7 +34,7 @@ jobs:
           auto-activate-base: false
 
       - name: Install crick
-        run: pip install --no-deps --global-option build --global-option --debug -e .
+        run: pip install --debug -e .
 
 
       - name: Run tests
