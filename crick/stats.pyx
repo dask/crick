@@ -14,6 +14,9 @@ cdef extern from "stats_stubs.c":
         np.float64_t m2
         np.float64_t m3
         np.float64_t m4
+        bint homogeneous
+        np.float64_t first_value
+
 
     stats_t *stats_new()
     void stats_free(stats_t *T)
@@ -73,7 +76,8 @@ cdef class SummaryStats:
 
     def __getstate__(self):
         return (self.stats.count, self.stats.sum, self.stats.min,
-                self.stats.max, self.stats.m2, self.stats.m3, self.stats.m4)
+                self.stats.max, self.stats.m2, self.stats.m3, self.stats.m4, 
+                self.stats.homogeneous, self.stats.first_value)
 
     def __setstate__(self, state):
         self.stats.count = state[0]
@@ -83,6 +87,8 @@ cdef class SummaryStats:
         self.stats.m2 = state[4]
         self.stats.m3 = state[5]
         self.stats.m4 = state[6]
+        self.stats.homogeneous = state[7]
+        self.stats.first_value = state[8]
 
     def add(self, double x, int count=1):
         """add(self, x)

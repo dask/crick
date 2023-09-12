@@ -49,7 +49,7 @@ def test_basic_stats(x):
         normal,
         empty,
         one,
-        pytest.param(duplicate, marks=scipy_xfail_mark),
+        pytest.param(duplicate),
         different,
     ],
 )
@@ -69,7 +69,7 @@ def test_skew(x, bias):
         normal,
         empty,
         one,
-        pytest.param(duplicate, marks=scipy_xfail_mark),
+        pytest.param(duplicate),
         different,
     ],
 )
