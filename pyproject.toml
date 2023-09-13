@@ -1,0 +1,22 @@
+[build-system]
+requires = [
+    "setuptools>=64",
+    "setuptools-scm[toml]>=6.2",
+    "Cython",
+    "numpy",
+    "versioneer[toml]",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crick"
+requires-python = ">=3.8"
+dynamic = ["version"]
+
+[tool.versioneer]
+VCS = "git"
+style = "pep440"
+versionfile_source = "crick/_version.py"
+versionfile_build = "crick/_version.py"
+tag_prefix = ""
+parentdir_prefix = "crick-"

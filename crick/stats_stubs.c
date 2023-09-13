@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdlib.h>
 #include <float.h>
 
@@ -16,6 +17,8 @@ typedef struct {
     npy_float64 m2;
     npy_float64 m3;
     npy_float64 m4;
+    bool homogeneous;
+    npy_float64 first_value;
 } stats_t;
 
 
@@ -30,7 +33,8 @@ CRICK_INLINE stats_t *stats_new() {
     T->m2 = 0;
     T->m3 = 0;
     T->m4 = 0;
-
+    T->homogeneous = true;
+    T->first_value = 0.;
     return T;
 }
 
@@ -73,6 +77,14 @@ CRICK_INLINE void stats_do_update(stats_t *T, npy_int64 n2, npy_float64 sum2,
 
 CRICK_INLINE void stats_merge(stats_t *T1, stats_t *T2) {
     if (T2->count == 0) return;
+
+    // T1 duplicated, but T2 isn't, then T1 no longer duplicated
+    if (T1->homogeneous && !T2->homogeneous) {
+        T1->homogeneous = false;
+    // Otherwise, only continues to be duplicated if their values match
+    } else if (T1->homogeneous && T2->homogeneous) {
+        T1->homogeneous = T1->first_value == T2->first_value;
+    }
     stats_do_update(T1, T2->count, T2->sum, T2->min, T2->max,
                     T2->m4, T2->m3, T2->m2);
 }
@@ -100,7 +112,7 @@ CRICK_INLINE double stats_std(stats_t *T, long ddof) {
 
 CRICK_INLINE double stats_skew(stats_t *T, int bias) {
     double n, m2, m3, skew;
-    if (!T->count) return NPY_NAN;
+    if (T->homogeneous) return NPY_NAN;
     n = T->count;
     m2 = T->m2 / T->count;
     m3 = T->m3 / T->count;
@@ -113,7 +125,7 @@ CRICK_INLINE double stats_skew(stats_t *T, int bias) {
 
 CRICK_INLINE double stats_kurt(stats_t *T, int fisher, int bias) {
     double n, m2, m4, kurt;
-    if (!T->count) return NPY_NAN;
+    if (T->homogeneous) return NPY_NAN;
     n = T->count;
     m2 = T->m2 / T->count;
     m4 = T->m4 / T->count;
@@ -185,8 +197,13 @@ CRICK_INLINE npy_intp stats_update_ndarray(stats_t *T, PyArrayObject *x,
         npy_intp count = *innersizeptr;
 
         while (count--) {
-            stats_add(T, *(npy_float64 *)data_x,
-                         *(npy_int64 *)data_w);
+            npy_float64 value = *(npy_float64 *)data_x;
+            if (T->count == 0) {
+                T->first_value = value;
+            } else if (T->homogeneous && T->first_value != value) {
+                T->homogeneous = false;
+            }
+            stats_add(T, value, *(npy_int64 *)data_w);
 
             data_x += stride_x;
             data_w += stride_w;
