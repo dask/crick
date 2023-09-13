@@ -49,7 +49,7 @@ def test_basic_stats(x):
         normal,
         empty,
         one,
-        pytest.param(duplicate),
+        duplicate,
         different,
     ],
 )
@@ -69,7 +69,7 @@ def test_skew(x, bias):
         normal,
         empty,
         one,
-        pytest.param(duplicate),
+        duplicate,
         different,
     ],
 )
