@@ -19,7 +19,7 @@ jobs:
 
     env:
       CIBW_SKIP: "pp*"
-      CIBW_BEFORE_ALL_LINUX: yum update -y && yum install -y blas-devel lapack-devel
+      CIBW_BEFORE_BUILD: pip install numpy --config-settings=setup-args="Dallow-noblas=true"
 
     steps:
       - uses: actions/checkout@v3
