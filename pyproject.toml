@@ -10,8 +10,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crick"
+description="High performance approximate and streaming algorithms"
+maintainers = [{name = "Jim Crist", email = "crist042@umn.edu"}]
+license = {text = "BSD-3-Clause"}
+readme = "README.rst"
 requires-python = ">=3.8"
 dynamic = ["version"]
+
+[project.urls]
+Source = "https://github.com/dask/crick"
+
+[tool.setuptools]
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.packages.find]
+namespaces = false
 
 [tool.versioneer]
 VCS = "git"

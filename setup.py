@@ -52,19 +52,7 @@ extensions = [
 ]
 
 setup(
-    name="crick",
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
-    description="High performance approximate and streaming algorithms",
-    long_description=(
-        open("README.rst").read() if os.path.exists("README.rst") else ""
-    ),
-    keywords="streaming approximate algorithms",
-    url="https://github.com/dask/crick",
-    author="Jim Crist",
-    author_email="crist042@umn.edu",
-    license="BSD",
-    packages=["crick", "crick.tests"],
     ext_modules=cythonize(extensions),
-    zip_safe=False,
 )
