@@ -1,7 +1,7 @@
 import os
 import sys
 
-import numpy.distutils.misc_util as np_misc
+import numpy as np
 from Cython import Tempita as tempita
 from Cython.Build import cythonize
 from setuptools import setup
@@ -9,8 +9,13 @@ from setuptools.extension import Extension
 
 import versioneer
 
-compile_args = np_misc.get_info("npymath")
-compile_args["include_dirs"].append("crick/klib")
+compile_args = dict(
+    library_dirs=[
+        os.path.abspath(os.path.join(np.get_include(), "..", "lib")),
+    ],
+    include_dirs=[np.get_include(), "crick/klib"],
+    libraries=["npymath"],
+)
 
 if "--debug" in sys.argv:
     sys.argv.remove("--debug")
