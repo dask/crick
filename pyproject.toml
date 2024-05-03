@@ -1,12 +1,12 @@
 [build-system]
 requires = [
-    "setuptools>=64",
+    "setuptools>=68.2.2",
     "setuptools-scm[toml]>=6.2",
     "Cython",
-    "numpy",
+    "numpy>=1.26.2",
     "versioneer[toml]",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
 name = "crick"
@@ -14,7 +14,7 @@ description="High performance approximate and streaming algorithms"
 maintainers = [{name = "Jim Crist", email = "crist042@umn.edu"}]
 license = {text = "BSD-3-Clause"}
 readme = "README.rst"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dynamic = ["version"]
 
 [project.urls]

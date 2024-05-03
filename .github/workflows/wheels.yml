@@ -15,12 +15,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest, macos-14]
 
     env:
       CIBW_SKIP: "pp*"
-      CIBW_ENVIRONMENT: "SETUPTOOLS_USE_DISTUTILS=stdlib"
-      CIBW_BEFORE_BUILD: pip install numpy --config-settings=setup-args="-Dallow-noblas=true"
+      CIBW_BEFORE_BUILD: pip install "numpy>=1.26.2" --config-settings=setup-args="-Dallow-noblas=true"
 
     steps:
       - uses: actions/checkout@v3
@@ -28,7 +27,7 @@ jobs:
           fetch-depth: 0  # Needed to retrieve tags for determining crick version number
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.11.4
+        uses: pypa/cibuildwheel@v2.17.0
 
       - uses: actions/upload-artifact@v3
         with:
