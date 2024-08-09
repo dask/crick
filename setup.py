@@ -7,8 +7,6 @@ from Cython.Build import cythonize
 from setuptools import setup
 from setuptools.extension import Extension
 
-import versioneer
-
 compile_args = dict(
     library_dirs=[
         os.path.abspath(os.path.join(np.get_include(), "..", "lib")),
@@ -57,7 +55,6 @@ extensions = [
 ]
 
 setup(
-    version=versioneer.get_version(),
-    cmdclass=versioneer.get_cmdclass(),
+    use_scm_version={"write_to": "crick/_version.py"},
     ext_modules=cythonize(extensions),
 )
