@@ -1,6 +1,5 @@
 exclude: |
     (?x)^(
-        versioneer.py|
         crick/_version.py
     )$
 repos:

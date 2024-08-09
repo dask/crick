@@ -4,7 +4,6 @@ requires = [
     "setuptools-scm[toml]>=6.2",
     "Cython",
     "numpy>=1.26.2",
-    "versioneer[toml]",
 ]
 build-backend = "setuptools.build_meta:__legacy__"
 
@@ -26,11 +25,3 @@ zip-safe = false
 
 [tool.setuptools.packages.find]
 namespaces = false
-
-[tool.versioneer]
-VCS = "git"
-style = "pep440"
-versionfile_source = "crick/_version.py"
-versionfile_build = "crick/_version.py"
-tag_prefix = ""
-parentdir_prefix = "crick-"

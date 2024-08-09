@@ -8,5 +8,3 @@ include README.rst
 include LICENSE
 include EXTERNAL_LICENSES
 include MANIFEST.in
-include versioneer.py
-include crick/_version.py

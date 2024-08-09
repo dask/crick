@@ -1,3 +1,6 @@
+# Auto-generated
+crick/_version.py
+
 # generated C files
 crick/space_saving.c
 crick/space_saving_stubs.c
