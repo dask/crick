@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from ._version import get_versions
 from .space_saving import SpaceSaving
 from .stats import SummaryStats

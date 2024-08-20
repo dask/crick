@@ -38,7 +38,7 @@ def generate_code(templates):
             # updated no need to generate
             continue
 
-        with open(template, "r") as f:
+        with open(template) as f:
             tmpl = f.read()
         output = tempita.sub(tmpl)
 
