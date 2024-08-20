@@ -14,7 +14,7 @@ description="High performance approximate and streaming algorithms"
 maintainers = [{name = "Jim Crist", email = "crist042@umn.edu"}]
 license = {text = "BSD-3-Clause"}
 readme = "README.rst"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["version"]
 
 [project.urls]
