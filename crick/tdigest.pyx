@@ -65,7 +65,7 @@ cdef class TDigest:
     Notes
     -----
     This implements the "MergingDigest" variant of the T-Digest algorithm
-    descibed in [1]_. The reference java implementation can be found at [2]_.
+    described in [1]_. The reference java implementation can be found at [2]_.
 
     References
     ----------
