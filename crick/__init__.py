@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from ._version import get_versions
 from .numpy_version import numpy_version
 from .space_saving import SpaceSaving
