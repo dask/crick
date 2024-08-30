@@ -21,11 +21,12 @@ dynamic = ["version"]
 Source = "https://github.com/dask/crick"
 
 [tool.setuptools]
-include-package-data = true
+include-package-data = false
 zip-safe = false
 
 [tool.setuptools.packages.find]
 namespaces = false
+exclude = ["crick.tests*"]
 
 [tool.versioneer]
 VCS = "git"
