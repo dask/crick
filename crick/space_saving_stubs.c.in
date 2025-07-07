@@ -460,5 +460,7 @@ finish:
  * as int64. Define a small helper to view float64 as int64: */
 
 CRICK_INLINE npy_int64 asint64(npy_float64 key) {
-  return *(npy_int64 *)(&key);
+  npy_int64 bytes;
+  memcpy(&bytes, &key, sizeof(bytes));
+  return bytes;
 }
