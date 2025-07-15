@@ -129,7 +129,7 @@ CRICK_INLINE double stats_kurt(stats_t *T, int fisher, int bias) {
     n = T->count;
     m2 = T->m2 / T->count;
     m4 = T->m4 / T->count;
-    kurt = m2 ? kurt = m4 / (m2 * m2) : 0;
+    kurt = m2 ? m4 / (m2 * m2) : 0;
     if (!bias && n > 3 && m2 > 0)
         kurt = ((n*n - 1)*kurt - 9*n + 15)/((n - 2)*(n - 3));
     return fisher ? kurt - 3 : kurt;
